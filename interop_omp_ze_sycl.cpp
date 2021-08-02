@@ -43,6 +43,10 @@ std::vector<struct syclDeviceInfo> get_ompDeviceInfos() {
     // Construct a context who is valid in all the GPU exposed by OpenMP
     // This is N2, but trivial to make it log(N)
     for ( const auto& [hContext, sycl_devices]: hContect2device ) {
+        
+        // This only work because the backend poiter is saved as a shared_pointer in SYCL context with Intel Implementation
+        // https://github.com/intel/llvm/blob/ef33c57e48237c7d918f5dab7893554cecc001dd/sycl/source/backend/level_zero.cpp#L59
+        // As far as I know this is not required by the SYCL2020 Spec
         sycl::context sycl_context = sycl::level_zero::make<sycl::context>(sycl_devices, hContext,  sycl::level_zero::ownership::keep);
 
         for (int D=0; D< omp_get_num_devices(); D++)
