@@ -8,14 +8,19 @@ namespace sycl = cl::sycl;
 
 struct syclDeviceInfo {
     sycl::context sycl_context;
+    sycl::device sycl_device;
     ze_context_handle_t ze_context;
-    int local_device_id;
 };
 
 // General case where each Context can have target multiple Device
-std::vector<struct syclDeviceInfo> get_ompDeviceInfos() {
+std::vector<struct syclDeviceInfo> xomp_get_infos_devices() {
 
-    std::vector<struct syclDeviceInfo> ompDeviceId2Context(omp_get_num_devices());
+    // We can cache this function. This simplify usage
+    static std::vector<struct syclDeviceInfo> ompDeviceId2Context;
+    if (!ompDeviceId2Context.empty()){
+       return ompDeviceId2Context;
+    }
+    ompDeviceId2Context.resize(omp_get_num_devices());
 
     //1. Map each level zero context to a vector a sycl::device.
     //   This is requied to create SYCL::context spaming multiple devices.
@@ -34,20 +39,18 @@ std::vector<struct syclDeviceInfo> get_ompDeviceInfos() {
         assert (err >= 0 && "omp_get_interop_ptr(omp_ipr_device)");
         #pragma omp interop destroy(o)
 
-        sycl::platform sycl_platform = sycl::level_zero::make<sycl::platform>(hPlatform);
-        hContext2device[hContext].push_back(sycl::level_zero::make<sycl::device>(sycl_platform, hDevice));
-
         // Store the Level_zero context. This will be required to create the SYCL context latter
         ompDeviceId2Context[D].ze_context = hContext;
-        //  Mapping between OpenMP device ID -> Sycl device ID in the data-structure
-        ompDeviceId2Context[D].local_device_id = hContext2device[hContext].size() - 1;
+
+        sycl::platform sycl_platform = sycl::level_zero::make<sycl::platform>(hPlatform);
+        ompDeviceId2Context[D].sycl_device = sycl::level_zero::make<sycl::device>(sycl_platform, hDevice);
+        hContext2device[hContext].push_back(ompDeviceId2Context[D].sycl_device);
     }
 
     // Construct sycl::contexts who stawn multiple openmp device, if possible.
     // This is N2, but trivial to make it log(N)
     for ( const auto& [hContext, sycl_devices]: hContext2device ) {
-        
-        
+
         // This only work because the backend poiter is saved as a shared_pointer in SYCL context with Intel Implementation
         // https://github.com/intel/llvm/blob/ef33c57e48237c7d918f5dab7893554cecc001dd/sycl/source/backend/level_zero.cpp#L59
         // As far as I know this is not required by the SYCL2020 Spec
@@ -62,17 +65,17 @@ std::vector<struct syclDeviceInfo> get_ompDeviceInfos() {
     return ompDeviceId2Context;
 }
 
+const struct syclDeviceInfo xomp_get_device_info(const int n) {
+    return xomp_get_infos_devices()[n];
+}
+
 int main() {
 
-    std::vector<struct syclDeviceInfo> ompDeviceId2Context = get_ompDeviceInfos();
-
-    int D = omp_get_num_devices() -1;
+    const int D = omp_get_num_devices() -1;
     omp_set_default_device(D);
 
-    const syclDeviceInfo mapping = ompDeviceId2Context[D];
-    sycl::context sycl_context = mapping.sycl_context;
-
-    sycl::queue Q { sycl_context, sycl_context.get_devices()[mapping.local_device_id] };
+     // Now create a SYCL Q who is targetting this Device
+    sycl::queue Q { xomp_get_device_info(D).sycl_context, xomp_get_device_info(D).sycl_device};
 
     const int N = 100;
     int *cpuMem = (int*) malloc(N*sizeof(int));
@@ -89,7 +92,7 @@ int main() {
     for (int i=0 ; i < N; i++)
         assert(cpuMem[i] == N);
 
-    // SYCL -> SYCL
+    // SYCL -> OMP
     int *syclMem = sycl::malloc_device<int>(N,Q);
     // Omp memcopy is using SYCL pointer
     #pragma omp target is_device_ptr(syclMem) map( from:cpuMem[0:N])
