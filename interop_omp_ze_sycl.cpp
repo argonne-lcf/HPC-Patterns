@@ -12,12 +12,14 @@ struct syclDeviceInfo {
     int local_device_id;
 };
 
-// General case where Context can have multiple Device
+// General case where each Context can have target multiple Device
 std::vector<struct syclDeviceInfo> get_ompDeviceInfos() {
 
     std::vector<struct syclDeviceInfo> ompDeviceId2Context(omp_get_num_devices());
-    //For pedagocical reason, this code assume the same platform for all devices.
-    std::unordered_map<ze_context_handle_t,std::vector<sycl::device>> hContect2device;
+
+    //1. Map each level zero context to a vector a sycl::device.
+    //   This is requied to create SYCL::context spaming multiple devices.
+    std::unordered_map<ze_context_handle_t,std::vector<sycl::device>> hContext2device;
     for (int D=0; D< omp_get_num_devices(); D++) {
         omp_interop_t o = 0;
         #pragma omp interop init(targetsync: o) device(D)
@@ -25,7 +27,6 @@ std::vector<struct syclDeviceInfo> get_ompDeviceInfos() {
         ze_driver_handle_t hPlatform = static_cast<ze_driver_handle_t>(omp_get_interop_ptr(o, omp_ipr_platform, &err));
         assert (err >= 0 && "omp_get_interop_ptr(omp_ipr_platform)");
         ze_context_handle_t hContext = static_cast<ze_context_handle_t>(omp_get_interop_ptr(o, omp_ipr_device_context, &err));
-        std::cout << hContext << std::endl;
         assert (err >= 0 && "omp_get_interop_ptr(omp_ipr_device_context)");
         // equivalent to:
         //ze_context_handle_t hContext = static_cast<ze_context_handle_t>(omp_target_get_context(0));
@@ -34,15 +35,18 @@ std::vector<struct syclDeviceInfo> get_ompDeviceInfos() {
         #pragma omp interop destroy(o)
 
         sycl::platform sycl_platform = sycl::level_zero::make<sycl::platform>(hPlatform);
-        hContect2device[hContext].push_back(sycl::level_zero::make<sycl::device>(sycl_platform, hDevice));
+        hContext2device[hContext].push_back(sycl::level_zero::make<sycl::device>(sycl_platform, hDevice));
 
+        // Store the Level_zero context. This will be required to create the SYCL context latter
         ompDeviceId2Context[D].ze_context = hContext;
-        ompDeviceId2Context[D].local_device_id = hContect2device[hContext].size() -1;
+        //  Mapping between OpenMP device ID -> Sycl device ID in the data-structure
+        ompDeviceId2Context[D].local_device_id = hContext2device[hContext].size() - 1;
     }
 
-    // Construct a context who is valid in all the GPU exposed by OpenMP
+    // Construct sycl::contexts who stawn multiple openmp device, if possible.
     // This is N2, but trivial to make it log(N)
-    for ( const auto& [hContext, sycl_devices]: hContect2device ) {
+    for ( const auto& [hContext, sycl_devices]: hContext2device ) {
+        
         
         // This only work because the backend poiter is saved as a shared_pointer in SYCL context with Intel Implementation
         // https://github.com/intel/llvm/blob/ef33c57e48237c7d918f5dab7893554cecc001dd/sycl/source/backend/level_zero.cpp#L59
@@ -54,6 +58,7 @@ std::vector<struct syclDeviceInfo> get_ompDeviceInfos() {
               ompDeviceId2Context[D].sycl_context = sycl_context;
     }
 
+    // This datascructure is a vector used to map a OpenMP device ID to a sycl context
     return ompDeviceId2Context;
 }
 
