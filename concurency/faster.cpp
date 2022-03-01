@@ -118,8 +118,9 @@ void bench(std::vector<std::string> commands, long kernel_tripcount,
 }
 
 void print_help_and_exit(std::string msg) {
-  std::cout << "ERROR: " << msg << std::endl;
-  const char *help = "Usage: ./a.out  (--in_order | --out_of_order)\n"
+  if (!msg.empty())
+    std::cout << "ERROR: " << msg << std::endl;
+  const char *help = "Usage: ./a.out  (in_order | out_of_order)\n"
                      "                [--enable_profiling]\n"
                      "                [--n_queues=<queues>]\n"
                      "                [--kernel_tripcount=<tripcount>]\n"
@@ -127,51 +128,54 @@ void print_help_and_exit(std::string msg) {
                      "\n"
                      "Options:\n"
                      "--kernel_tripcount       [default: 10000]\n"
-                     "--n_queues=<nqueues>     [default: -1]. One queue when "
-                     "out_of_order , one per COMMANDS when in order\n"
-                     "COMMAND                  [possible values: C,MD,DM]\n";
+                     "--n_queues=<nqueues>     [default: -1]. Number of queues used to run COMMANDS. \n"
+                     "                                        If -1: one queue when out_of_order, one per COMMANDS when in order\n"
+                     "COMMAND                  [possible values: C,MD,DM]\n"
+                     "                            C:  Compute kernel \n"
+                     "                            MD: Malloc allocated memory to Device memory memcopy \n"
+                     "                            DM: Device Memory to Malloc allocated memory memcopy \n";
   std::cout << help << std::endl;
   std::exit(1);
 }
 
 int main(int argc, char *argv[]) {
-  bool enable_profiling = false;
+  std::vector<std::string> argl(argv+1, argv + argc);
+  if (argl.empty())
+    print_help_and_exit("");
+
   bool in_order = false;
-  bool out_of_order = false;
+  if ((argl[0] != "out_of_order") && (argl[0] != "in_order"))
+    print_help_and_exit("Need to specify (in_order,out_of_order)");
+  else if (argl[0] == "in_order")
+    in_order = true;
+  // in_order = false; mean out_of_order. I know stupid optimization
+
+  bool enable_profiling = false;
   int n_queues = -1;
   std::vector<std::string> commands;
   long kernel_tripcount = 10000;
-
+  
   // I'm just an old C programmer trying to do some C++
-  for (int i = 1; i < argc; i++) {
-    std::string s{argv[i]};
+  for (int i=1 ; i < argl.size(); i++) {
+    std::string s{argl[i]};
     if (s == "--enable_profiling") {
       enable_profiling = true;
-    } else if (s == "--in_order") {
-      if (out_of_order)
-        print_help_and_exit("Cannot have --in_order and --out_of_order");
-      in_order = true;
-    } else if (s == "--out_of_order") {
-      if (in_order)
-        print_help_and_exit("Cannot have --in_order and --out_of_order");
-      out_of_order = true;
     } else if (s == "--queues") {
       i++;
-      if (i < argc) {
-        n_queues = std::stoi(argv[i]);
+      if (i < argl.size()) {
+        n_queues = std::stoi(argl[i]);
       } else {
         print_help_and_exit("Need to specify an value for --queues");
       }
     } else if (s == "--kernel_tripcount") {
       i++;
-      if (i < argc) {
-        kernel_tripcount = std::stol(argv[i]);
+      if (i < argl.size()) {
+        kernel_tripcount = std::stol(argl[i]);
       } else {
         print_help_and_exit("Need to specify an value for --kernel_tripcount");
       }
     } else if (s.rfind("-", 0) == 0) {
-      print_help_and_exit("Unsuported option: " + s);
-
+      print_help_and_exit("Unsuported option: '" + s + "'");
     } else {
       static std::vector<std::string> command_supported = {"C", "MD", "DM"};
       if (std::find(command_supported.begin(), command_supported.end(), s) ==
@@ -183,13 +187,12 @@ int main(int argc, char *argv[]) {
   if (n_queues == -1) {
     if (in_order)
       n_queues = 1;
-    else if (out_of_order)
+    else
       n_queues = commands.size();
   }
-  if (not(out_of_order || in_order) || commands.empty()) {
+  if (commands.empty())
     print_help_and_exit("Need to specify somme COMMAND and the order "
                         "(--out_of_order or --in_order)");
-  }
 
   long serial_total_cpu_time;
   int serial_max_cpu_time_index_command;
