@@ -1,10 +1,20 @@
 set -o xtrace
 
-for c in "C C" "C MD" "C DM" "MD DM"
+dpcpp faster.cpp
+
+kernelTripcount=100000
+
+( 
+for commands in "C C" "C MD" "C DM" "MD DM"
 do
-  for p in "disable_profiling" "enable_profiling"
+  for mode in "out_of_order" "in_order"
   do
-    ./a.out 800000 $p out_of_order 1 $c
-    ./a.out 800000 $p in_order 2 $c
+    ./a.out $mode $commands --kernel_tripcount $kernelTripcount
+    ./a.out $mode $commands --kernel_tripcount $kernelTripcount --enable_profiling
   done
 done
+) |& tee run.log
+
+echo "#SUMMARY"
+egrep  -E '+./a.out|SUCCESS|FAILURE' run.log
+

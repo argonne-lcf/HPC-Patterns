@@ -36,7 +36,8 @@ void bench(std::vector<std::string> commands, long kernel_tripcount,
 
   const sycl::device D{sycl::gpu_selector()};
   const int globalWIs = D.get_info<sycl::info::device::sub_group_sizes>()[0];
-  const int N = D.get_info<sycl::info::device::max_mem_alloc_size>() / sizeof(T);
+  const int N =
+      D.get_info<sycl::info::device::max_mem_alloc_size>() / sizeof(T);
 
   const sycl::context C(D);
   sycl::property_list pl;
@@ -117,10 +118,11 @@ void bench(std::vector<std::string> commands, long kernel_tripcount,
           : free(ptr);
 }
 
-void print_help_and_exit(std::string msg) {
+void print_help_and_exit(std::string binname, std::string msg) {
   if (!msg.empty())
     std::cout << "ERROR: " << msg << std::endl;
-  const char *help = "Usage: ./a.out  (in_order | out_of_order)\n"
+  std::string help = "Usage: " + binname +
+                     " (in_order | out_of_order)\n"
                      "                [--enable_profiling]\n"
                      "                [--n_queues=<queues>]\n"
                      "                [--kernel_tripcount=<tripcount>]\n"
@@ -128,24 +130,28 @@ void print_help_and_exit(std::string msg) {
                      "\n"
                      "Options:\n"
                      "--kernel_tripcount       [default: 10000]\n"
-                     "--n_queues=<nqueues>     [default: -1]. Number of queues used to run COMMANDS. \n"
-                     "                                        If -1: one queue when out_of_order, one per COMMANDS when in order\n"
+                     "--n_queues=<nqueues>     [default: -1]. Number of queues "
+                     "used to run COMMANDS. \n"
+                     "                                        If -1: one queue "
+                     "when out_of_order, one per COMMANDS when in order\n"
                      "COMMAND                  [possible values: C,MD,DM]\n"
                      "                            C:  Compute kernel \n"
-                     "                            MD: Malloc allocated memory to Device memory memcopy \n"
-                     "                            DM: Device Memory to Malloc allocated memory memcopy \n";
+                     "                            MD: Malloc allocated memory "
+                     "to Device memory memcopy \n"
+                     "                            DM: Device Memory to Malloc "
+                     "allocated memory memcopy \n";
   std::cout << help << std::endl;
   std::exit(1);
 }
 
 int main(int argc, char *argv[]) {
-  std::vector<std::string> argl(argv+1, argv + argc);
+  std::vector<std::string> argl(argv + 1, argv + argc);
   if (argl.empty())
-    print_help_and_exit("");
+    print_help_and_exit(argv[0], "");
 
   bool in_order = false;
   if ((argl[0] != "out_of_order") && (argl[0] != "in_order"))
-    print_help_and_exit("Need to specify (in_order,out_of_order)");
+    print_help_and_exit(argv[0], "Need to specify 'in_order' or 'out_of_order' option)");
   else if (argl[0] == "in_order")
     in_order = true;
   // in_order = false; mean out_of_order. I know stupid optimization
@@ -154,9 +160,9 @@ int main(int argc, char *argv[]) {
   int n_queues = -1;
   std::vector<std::string> commands;
   long kernel_tripcount = 10000;
-  
+
   // I'm just an old C programmer trying to do some C++
-  for (int i=1 ; i < argl.size(); i++) {
+  for (int i = 1; i < argl.size(); i++) {
     std::string s{argl[i]};
     if (s == "--enable_profiling") {
       enable_profiling = true;
@@ -165,22 +171,23 @@ int main(int argc, char *argv[]) {
       if (i < argl.size()) {
         n_queues = std::stoi(argl[i]);
       } else {
-        print_help_and_exit("Need to specify an value for --queues");
+        print_help_and_exit(argv[0], "Need to specify an value for '--queues'");
       }
     } else if (s == "--kernel_tripcount") {
       i++;
       if (i < argl.size()) {
         kernel_tripcount = std::stol(argl[i]);
       } else {
-        print_help_and_exit("Need to specify an value for --kernel_tripcount");
+        print_help_and_exit(argv[0],
+                            "Need to specify an value for '--kernel_tripcount'");
       }
     } else if (s.rfind("-", 0) == 0) {
-      print_help_and_exit("Unsuported option: '" + s + "'");
+      print_help_and_exit(argv[0], "Unsuported option: '" + s + "'");
     } else {
       static std::vector<std::string> command_supported = {"C", "MD", "DM"};
       if (std::find(command_supported.begin(), command_supported.end(), s) ==
           command_supported.end())
-        print_help_and_exit("Unsuported value for COMMAND");
+        print_help_and_exit(argv[0], "Unsuported value for COMMAND");
       commands.push_back(s);
     }
   }
@@ -191,8 +198,8 @@ int main(int argc, char *argv[]) {
       n_queues = commands.size();
   }
   if (commands.empty())
-    print_help_and_exit("Need to specify somme COMMAND and the order "
-                        "(--out_of_order or --in_order)");
+    print_help_and_exit(argv[0], "Need to specify somme COMMAND and the order "
+                                 "('--out_of_order' or '--in_order')");
 
   long serial_total_cpu_time;
   int serial_max_cpu_time_index_command;
@@ -204,14 +211,13 @@ int main(int argc, char *argv[]) {
             << " (max commands (us) was "
             << commands[serial_max_cpu_time_index_command] << ": "
             << serial_max_cpu_time_command << ")" << std::endl;
-  const double expected =
+  const double max_speedup =
       1. * serial_total_cpu_time / serial_max_cpu_time_command;
-  std::cout << "Expecting (assuming maximun concurency and negligeable runtime "
-               "overhead) "
-            << expected << "x speedup" << std::endl;
-  if (expected <= 1.30)
-    std::cerr << " Warining: Large unblance between the commands... You may "
-                 "not want to trust bellow conclusion."
+  std::cout << "Maximun Theoritical Speedup (assuming maximun concurency and "
+               "negligeable runtime overhead) "
+            << max_speedup << "x" << std::endl;
+  if (max_speedup <= 1.30)
+    std::cerr << "  WARNING: Large unblance between commands. Please play with '--kernel_tripcount' "
               << std::endl;
 
   long concurent_total_cpu_time;
@@ -220,6 +226,7 @@ int main(int argc, char *argv[]) {
   std::cout << "Total // (us):     " << concurent_total_cpu_time << std::endl;
   std::cout << "Got " << 1. * serial_total_cpu_time / concurent_total_cpu_time
             << "x speed-up relative to serial" << std::endl;
+
   if (concurent_total_cpu_time <= 1.30 * serial_max_cpu_time_command) {
     std::cout << "SUCCESS: Concurent is faster than serial" << std::endl;
     return 0;
