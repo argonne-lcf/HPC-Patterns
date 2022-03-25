@@ -1,11 +1,11 @@
-# Experiment Cancurency
+# Experiment Concurrency
 
 
-Tests if runnings independant COMMANDS in a mode who allow concurency/overlaps, is fater than running them serialy. 
+Tests if runnings independent COMMANDS in a mode that allows concurrency/overlaps is faster than running them serially. 
 
 ## OMP
 
-On OpenMP one can hope to acheive concurency in two main fashion (please feel free to make a PR to use task):
+With OpenMP one can hope to achieve concurrency using two main strategies (please feel free to make a PR that use task):
 
 ### `host_threads`
 
@@ -44,7 +44,7 @@ COMMAND                  [possible values: C,MD,DM]
 
 ## SYCL
 
-On SYCL  one can hope to acheive concurency in two main fashion:
+On SYCL  one can hope to achieve concurrency in two main fashions:
 
 ### `our of order queue`
 
