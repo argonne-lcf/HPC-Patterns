@@ -30,8 +30,6 @@ template <class T> T busy_wait(long N, T i) {
   return y;
 }
 
-// No metadirective in most of the compiler so...
-//  UGLY PRAGMA to the rescue!
 template <class T>
 void bench(std::vector<std::string> commands, long kernel_tripcount,
            std::string mode, int num_threads,
@@ -64,52 +62,41 @@ void bench(std::vector<std::string> commands, long kernel_tripcount,
   for (int r = 0; r < NUM_REPETION; r++) {
     std::vector<long> cpu_times;
     auto s0 = std::chrono::high_resolution_clock::now();
-#ifdef HOST_THREADS
-    if (mode == "serial")
-        omp_set_num_threads(1);
-    else
-        omp_set_num_threads(num_threads);
-    #pragma omp parallel for
-#endif
+    #pragma omp metadirective \
+            when( user={condition(mode == "host_threads")}: parallel for) \
+            default()
     for (int i = 0; i < commands.size(); i++) {
+       std::cout << omp_get_thread_num() << std::endl;
       const auto s = std::chrono::high_resolution_clock::now();
       if (commands[i] == "C") {
         T *ptr = buffers[i];
-#ifdef NOWAIT
-    #pragma omp target teams distribute parallel for nowait
-#else
-    #pragma omp target teams distribute parallel for
-#endif
+        #pragma omp metadirective \
+                when(user={condition(mode == "nowait")}: target teams distribute parallel for nowait) \
+                default(                                 target teams distribute parallel for)
         for (int j=0; j < globalWIs; j++)
           ptr[j] = busy_wait(kernel_tripcount, (T)j);
       } else if (commands[i] == "DM") {
         T *ptr=buffers[i];
-#ifdef NOWAIT
-    #pragma omp target update from(ptr[:N]) nowait
-#else
-    #pragma omp target update from(ptr[:N]) 
-#endif
+        #pragma omp metadirective \
+                when(user={condition(mode == "nowait")}: target update from(ptr[:N]) nowait) \
+                default(                                 target update from(ptr[:N]))
+
       } else if (commands[i] == "MD") {
          T *ptr=buffers[i];
-#ifdef NOWAIT
-    #pragma omp target update to(ptr[:N]) nowait
-#else
-    #pragma omp target update to(ptr[:N])
-#endif
+        #pragma omp metadirective \
+                when(user={condition(mode == "nowait")}: target update to(ptr[:N]) nowait) \
+                default(                                 target update to(ptr[:N]))
       }
       if (mode == "serial") {
-#ifdef NOWAIT
-    #pragma omp taskwait
-#endif
         const auto e = std::chrono::high_resolution_clock::now();
         cpu_times.push_back(
             std::chrono::duration_cast<std::chrono::microseconds>(e - s)
                 .count());
       }
     }
-#ifdef NOWAIT
-    #pragma omp taskwait
-#endif
+    #pragma omp metadirective \
+            when(user={condition(mode == "nowait")}: taskwait) \
+            default()
     const auto e0 = std::chrono::high_resolution_clock::now();
     const auto curent_total_cpu_time =
         std::chrono::duration_cast<std::chrono::microseconds>(e0 - s0).count();
@@ -161,16 +148,6 @@ int main(int argc, char *argv[]) {
   if ((mode != "nowait") && (mode != "host_threads") && (mode != "serial") )
     print_help_and_exit(argv[0], "Need to specify 'nowait', 'host_threads', or 'serial' option)");
 
-  if (mode == "nowait") {
-#ifndef NOWAIT
-    print_help_and_exit(argv[0], "Need to compile with -DNOWAIT to use nowait mode)");
-#endif
-  }
-  if (mode == "host_threads") {
-#ifndef HOST_THREADS
-    print_help_and_exit(argv[0], "Need to compile with -DHOST_THREADS to use nowait mode)");
-#endif
-  }
   int threads_count = -1;
   std::vector<std::string> commands;
   long kernel_tripcount = 10000;
@@ -205,11 +182,12 @@ int main(int argc, char *argv[]) {
       commands.push_back(s);
     }
   }
-  if (threads_count == -1)
+  if (threads_count == -1) {
     threads_count = commands.size();
-  
+  }
   if (commands.empty())
-    print_help_and_exit(argv[0], "Need to specify somme COMMAND");
+    print_help_and_exit(argv[0], "Need to specify somme COMMAND and the order "
+                                 "('--out_of_order' or '--in_order')");
 
   long serial_total_cpu_time;
   int serial_max_cpu_time_index_command;

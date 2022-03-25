@@ -1,6 +1,6 @@
 set -o xtrace
 
-dpcpp faster.cpp
+dpcpp sycl_con.cpp
 
 kernelTripcount=100000
 
