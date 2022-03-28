@@ -1,25 +1,26 @@
-#define MAD_4(x, y)                                                            \
-  x = y * x + y;                                                               \
-  y = x * y + x;                                                               \
-  x = y * x + y;                                                               \
+#define MAD_4(x, y)                                                                                                                                                                                    \
+  x = y * x + y;                                                                                                                                                                                       \
+  y = x * y + x;                                                                                                                                                                                       \
+  x = y * x + y;                                                                                                                                                                                       \
   y = x * y + x;
-#define MAD_16(x, y)                                                           \
-  MAD_4(x, y);                                                                 \
-  MAD_4(x, y);                                                                 \
-  MAD_4(x, y);                                                                 \
+#define MAD_16(x, y)                                                                                                                                                                                   \
+  MAD_4(x, y);                                                                                                                                                                                         \
+  MAD_4(x, y);                                                                                                                                                                                         \
+  MAD_4(x, y);                                                                                                                                                                                         \
   MAD_4(x, y);
-#define MAD_64(x, y)                                                           \
-  MAD_16(x, y);                                                                \
-  MAD_16(x, y);                                                                \
-  MAD_16(x, y);                                                                \
+#define MAD_64(x, y)                                                                                                                                                                                   \
+  MAD_16(x, y);                                                                                                                                                                                        \
+  MAD_16(x, y);                                                                                                                                                                                        \
+  MAD_16(x, y);                                                                                                                                                                                        \
   MAD_16(x, y);
 
 #include <chrono>
+#include <iomanip>
 #include <iostream>
+#include <numeric>
+#include <unordered_map>
 #include <utility>
 #include <vector>
-#include <iomanip>
-#include <numeric>
 
 #include <sycl/sycl.hpp>
 #define NUM_REPETION 10
@@ -34,68 +35,60 @@ template <class T> T busy_wait(long N, T i) {
 }
 
 template <class T>
-std::pair<long, std::vector<long>> bench(std::string mode, std::vector<std::string> commands, 
-          bool enable_profiling, int n_queues, long kernel_tripcount =0) {
+std::pair<long, std::vector<long>> bench(std::string mode, std::vector<std::string> commands, std::unordered_map<std::string, long> commands_parameters, bool enable_profiling, int n_queues) {
 
-//   __
-//    |  ._  o _|_
-//   _|_ | | |  |_
-//
+  //   ___
+  //    |  ._  o _|_
+  //   _|_ | | |  |_
+  //
   const sycl::device D{sycl::gpu_selector()};
-  const int globalWIs = D.get_info<sycl::info::device::sub_group_sizes>()[0];
-  const int N_copy = D.get_info<sycl::info::device::max_mem_alloc_size>() / sizeof(T);
   const sycl::context C(D);
-
   // By default SYCL queue are out-of-order
   sycl::property_list pl;
-  if ( (mode == "in_order") && enable_profiling)
-    pl = sycl::property_list{sycl::property::queue::in_order{},
-                             sycl::property::queue::enable_profiling{}};
+  if ((mode == "in_order") && enable_profiling)
+    pl = sycl::property_list{sycl::property::queue::in_order{}, sycl::property::queue::enable_profiling{}};
   else if (mode == "in_order")
     pl = sycl::property_list{sycl::property::queue::in_order{}};
   else if (enable_profiling)
     pl = sycl::property_list{sycl::property::queue::enable_profiling{}};
 
-  std::vector<sycl::queue> Qs(n_queues, sycl::queue(C, D, pl)) ;
-  //Initialize buffers according to the commands
+  // List of queues!
+  std::vector<sycl::queue> Qs(n_queues, sycl::queue(C, D, pl));
+  // Initialize buffers according to the commands
   std::vector<std::vector<T *>> buffers;
   for (auto &command : commands) {
-    std::vector<T *> buffer;
-    for (const char &t : command) {
-      T *b;
-      if (t == 'M') {
-        b = static_cast<T *>(calloc(N_copy,sizeof(T)));
-      } else if (t == 'D') {
-        b = sycl::malloc_device<T>(N_copy, D, C);
-      } else if (t == 'C') {
-        b = sycl::malloc_device<T>(globalWIs, D, C);
-      }
-      buffer.push_back(b);
-    }
-    buffers.push_back(buffer);
+    const auto N = commands_parameters["buffer_" + command];
+    if (command == "C")
+      buffers.push_back({sycl::malloc_device<T>(N, D, C)});
+    else if (command == "DM")
+      buffers.push_back({sycl::malloc_device<T>(N, D, C), static_cast<T *>(calloc(N, sizeof(T)))});
+    else if (command == "MD")
+      buffers.push_back({static_cast<T *>(calloc(N, sizeof(T))), sycl::malloc_device<T>(N, D, C)});
   }
+
   long total_time = std::numeric_limits<long>::max();
   std::vector<long> commands_times;
   if (mode == "serial")
     std::fill_n(std::back_inserter(commands_times), commands.size(), std::numeric_limits<long>::max());
 
-//    _
-//   |_)  _  ._   _ |_
-//   |_) (/_ | | (_ | |
-//
+  //    _
+  //   |_)  _  ._   _ |_
+  //   |_) (/_ | | (_ | |
+  //
   for (int r = 0; r < NUM_REPETION; r++) {
     auto s0 = std::chrono::high_resolution_clock::now();
-    //Run all commands
+    // Run all commands
     for (int i = 0; i < commands.size(); i++) {
       const auto s = std::chrono::high_resolution_clock::now();
       sycl::queue Q = Qs[i % n_queues];
+      const auto N = commands_parameters["buffer_" + commands[i]];
+
       if (commands[i] == "C") {
         T *ptr = buffers[i][0];
-        Q.parallel_for(globalWIs, [ptr, kernel_tripcount](sycl::item<1> j) {
-          ptr[j] = busy_wait(kernel_tripcount, (T)j);
-        });
+        const auto kernel_tripcount = commands_parameters["tripcount_C"];
+        Q.parallel_for(N, [ptr, kernel_tripcount](sycl::item<1> j) { ptr[j] = busy_wait(kernel_tripcount, (T)j); });
       } else {
-        Q.copy(buffers[i][1], buffers[i][0], N_copy);
+        Q.copy(buffers[i][1], buffers[i][0], N);
       }
 
       if (mode == "serial") {
@@ -105,7 +98,7 @@ std::pair<long, std::vector<long>> bench(std::string mode, std::vector<std::stri
         commands_times[i] = std::min(commands_times[i], curent_kernel_time);
       }
     }
-    //Sync all queues
+    // Sync all queues
     for (auto &Q : Qs)
       Q.wait();
     // Save time
@@ -114,13 +107,17 @@ std::pair<long, std::vector<long>> bench(std::string mode, std::vector<std::stri
     total_time = std::min(total_time, curent_total_time);
   }
 
-//    _
-//   /  |  _   _. ._      ._ 
-//   \_ | (/_ (_| | | |_| |_)
-//                        |
+  // Assume the "best theoritical" serial
+  if (mode == "serial")
+    total_time = std::min(total_time, std::accumulate(commands_times.begin(), commands_times.end(), 0L));
+
+  //    _
+  //   /  |  _   _. ._      ._
+  //   \_ | (/_ (_| | | |_| |_)
+  //                        |
   for (const auto &buffer : buffers)
     for (const auto &ptr : buffer)
-      //Shorter than to remember commands types...
+      // Shorter than to remember commands types...
       (sycl::get_pointer_type(ptr, C) != sycl::usm::alloc::unknown) ? sycl::free(ptr, C) : free(ptr);
 
   return std::make_pair(total_time, commands_times);
@@ -137,8 +134,10 @@ void print_help_and_exit(std::string binname, std::string msg) {
                      "                COMMAND...\n"
                      "\n"
                      "Options:\n"
-                     "--kernel_tripcount       [default: -1]. Number of FMA per compute kernel\n"
-                     "                             '-1' mean autotuning of this parameter\n" 
+                     "--C_tripcount            [default: -1]. Number of FMA per compute kernel\n"
+                     "                             '-1' will auto-tune this parameter\n"
+                     "--{C,MD,DM}_buffer       [default: -1]. Work-group size of the commands\n"
+                     "                             '-1' will auto-tune this parameter\n"
                      "--n_queues=<nqueues>     [default: -1]. Number of queues used to run COMMANDS\n"
                      "                            '-1' mean automatic selection:\n"
                      "                              - if `in_order`, one queue per COMMAND\n"
@@ -152,11 +151,25 @@ void print_help_and_exit(std::string binname, std::string msg) {
 }
 
 int main(int argc, char *argv[]) {
-//    _                       _                                         
-//   |_) _. ._ _ o ._   _    /  |     /\  ._ _      ._ _   _  ._ _|_  _ 
-//   |  (_| | _> | | | (_|   \_ |_   /--\ | (_| |_| | | | (/_ | | |_ _> 
-//                      _|                   _|                         
-//
+  //    _       _                 _
+  //   | \  _ _|_ _.     | _|_   |_) _. ._ _. ._ _   _ _|_  _  ._   \  / _. |      _   _
+  //   |_/ (/_ | (_| |_| |  |_   |  (_| | (_| | | | (/_ |_ (/_ |     \/ (_| | |_| (/_ _>
+  //
+  const sycl::device D{sycl::gpu_selector()};
+  std::unordered_map<std::string, long> commands_parameters_default = {{"buffer_MD", D.get_info<sycl::info::device::max_mem_alloc_size>() / sizeof(float)},
+                                                                       {"buffer_DM", D.get_info<sycl::info::device::max_mem_alloc_size>() / sizeof(float)},
+                                                                       {"buffer_C", D.get_info<sycl::info::device::sub_group_sizes>()[0]},
+                                                                       {"tripcount_C", 40000}};
+
+  //    _                       _
+  //   |_) _. ._ _ o ._   _    /  |     /\  ._ _      ._ _   _  ._ _|_  _
+  //   |  (_| | _> | | | (_|   \_ |_   /--\ | (_| |_| | | | (/_ | | |_ _>
+  //                      _|                   _|
+  //
+  std::unordered_map<std::string, long> commands_parameters_cli = {{"buffer_MD", -1}, {"buffer_DM", -1}, {"buffer_C", -1}, {"tripcount_C", -1}};
+  bool enable_profiling = false;
+  int n_queues = -1;
+
   std::vector<std::string> argl(argv + 1, argv + argc);
   if (argl.empty())
     print_help_and_exit(argv[0], "");
@@ -165,9 +178,6 @@ int main(int argc, char *argv[]) {
   if ((mode != "out_of_order") && (mode != "in_order") && (mode != "serial"))
     print_help_and_exit(argv[0], "Need to specify 'in_order', 'out_of_order', 'serial', option");
 
-  bool enable_profiling = false;
-  int n_queues = -1;
-  long kernel_tripcount = -1;
   std::vector<std::string> commands;
   // I'm just an old C programmer trying to do some C++
   for (int i = 1; i < argl.size(); i++) {
@@ -181,13 +191,12 @@ int main(int argc, char *argv[]) {
       } else {
         print_help_and_exit(argv[0], "Need to specify an value for '--queues'");
       }
-    } else if (s == "--kernel_tripcount") {
+    } else if ((s.rfind("--tripcount_") == 0) || (s.rfind("--buffer_", 0) == 0)) {
       i++;
       if (i < argl.size()) {
-        kernel_tripcount = std::stol(argl[i]);
+        commands_parameters_cli[s.substr(2)] = std::stol(argl[i]);
       } else {
-        print_help_and_exit(argv[0],
-                            "Need to specify an value for '--kernel_tripcount'");
+        print_help_and_exit(argv[0], "Need to specify an value for " + s);
       }
     } else if (s.rfind("-", 0) == 0) {
       print_help_and_exit(argv[0], "Unsupported option: '" + s + "'");
@@ -204,51 +213,67 @@ int main(int argc, char *argv[]) {
   if (commands.empty())
     print_help_and_exit(argv[0], "Need to specify COMMANDS (C,MD,DM)");
 
-//                                     __                
-//    /\     _|_  _ _|_     ._   _    (_   _  ._ o  _. | 
-//   /--\ |_| |_ (_) |_ |_| | | (/_   __) (/_ |  | (_| | 
-//                                                       
-  if (kernel_tripcount == -1 && (std::count(commands.begin(), commands.end(), "C"))) {
-    // We want each command to take the same time. We have only one parameter (kernel_tripcount) 
-    // In first approximation for the compute kernel T(kernel_time) -> elapsed_time is linear
-    long kernel_tripcount0 = 20000;
-    // Some strange HW don't have the same BW for MD and DM. 
-    // We will autotunne C so that it take the average time for data transfer.
-    std::vector<std::string> copy_commands;
-    std::copy_if(commands.begin(), commands.end(), std::back_inserter(copy_commands), [](auto s){return s != "C";} );
-    const auto& [_1, commands_times] = bench<float>("serial", copy_commands, enable_profiling, n_queues);
-    double copy_time = std::accumulate(commands_times.begin(), commands_times.end(),0) / (1.*commands_times.size());
-    const auto& [compute_time0, _2] = bench<float>("serial", {"C"}, enable_profiling, n_queues, kernel_tripcount0);
-    kernel_tripcount = (1.*kernel_tripcount0/compute_time0)*copy_time;
-    std::cout << "Autotuned Kernel Tripcount " << kernel_tripcount << std::endl;
+  //                                     __
+  //    /\     _|_  _ _|_     ._   _    (_   _  ._ o  _. |
+  //   /--\ |_| |_ (_) |_ |_| | | (/_   __) (/_ |  | (_| |
+  //
+  auto commands_parameters(commands_parameters_cli);
+  for (const auto &s: commands_parameters_cli)
+    if (s.second == -1)
+        commands_parameters[s.first] = commands_parameters_default[s.first];
+
+  if ((commands_parameters_cli["buffer_DM"] == -1 && std::count(commands.begin(), commands.end(), "DM")) &&
+      (commands_parameters_cli["buffer_MD"] == -1 && std::count(commands.begin(), commands.end(), "MD"))) {
+    std::vector<std::string> commands_{"DM", "MD"};
+    const auto & [ _1, commands_times ] = bench<float>("serial", commands_, commands_parameters, enable_profiling, n_queues);
+    // Default is maximum, hence we will reduce the longest one
+    if (commands_times[0] >= commands_times[1])
+      commands_parameters["buffer_DM"] = (1. * commands_times[1] / commands_times[0]) * commands_parameters["buffer_DM"];
+    else
+      commands_parameters["buffer_MD"] = (1. * commands_times[0] / commands_times[1]) * commands_parameters["buffer_MD"];
+
+    for (auto &command : commands_)
+      std::cout << "Autotuned buffer_" << command << " " << commands_parameters["buffer_" + command] << std::endl;
   }
 
-//    _                             __                   _       _                     
-//   /   _  ._ _  ._     _|_  _    (_   _  ._ o  _. |   |_)  _ _|_ _  ._ _  ._   _  _  
-//   \_ (_) | | | |_) |_| |_ (/_   __) (/_ |  | (_| |   | \ (/_ | (/_ | (/_ | | (_ (/_ 
-//                |                                                                    
- const auto& [serial_total_time, serial_commands_times] = bench<float>("serial", commands, enable_profiling, n_queues, kernel_tripcount);
- std::cout << "Total Time Serial " << serial_total_time << "us" << std::endl;
- for (size_t i=0; i < commands.size(); i++)
-    std::cout << "  " << std::setw(2) << commands[i] <<  " " << serial_commands_times[i] << "us" << std::endl;
+  if (commands_parameters_cli["tripcount_C"] == -1 && std::count(commands.begin(), commands.end(), "C") &&
+      (std::count(commands.begin(), commands.end(), "DM") || std::count(commands.begin(), commands.end(), "MD"))) {
+    // We want each command to take the same time. We have only one parameter (kernel_tripcount)
+    // In first approximation for the compute kernel T(kernel_time) -> elapsed_time is linear
+    std::vector<std::string> copy_commands;
+    std::copy_if(commands.begin(), commands.end(), std::back_inserter(copy_commands), [](auto s) { return s != "C"; });
+    const auto & [ _1, commands_times ] = bench<float>("serial", copy_commands, commands_parameters, enable_profiling, n_queues);
+    const double copy_time = std::accumulate(commands_times.begin(), commands_times.end(), 0) / (1. * commands_times.size());
+    const auto & [ compute_time0, _2 ] = bench<float>("serial", {"C"}, commands_parameters, enable_profiling, n_queues);
+    commands_parameters["tripcount_C"] = (1. * commands_parameters["tripcount_C"] / compute_time0) * copy_time;
+    std::cout << "Autotuned Kernel Tripcount " << commands_parameters["tripcount_C"] << std::endl;
+  }
 
- const double max_speedup = (1.* serial_total_time) / *std::max_element(serial_commands_times.begin(), serial_commands_times.end());
- std::cout << "Maximum Theoretical Speedup " << max_speedup << "x" << std::endl;
+  //    _                             __                   _       _
+  //   /   _  ._ _  ._     _|_  _    (_   _  ._ o  _. |   |_)  _ _|_ _  ._ _  ._   _  _
+  //   \_ (_) | | | |_) |_| |_ (/_   __) (/_ |  | (_| |   | \ (/_ | (/_ | (/_ | | (_ (/_
+  //                |
+  const auto & [ serial_total_time, serial_commands_times ] = bench<float>("serial", commands, commands_parameters, enable_profiling, n_queues);
+  std::cout << "Best Total Time Serial " << serial_total_time << "us" << std::endl;
+  for (size_t i = 0; i < commands.size(); i++)
+    std::cout << "Best " << std::setw(2) << commands[i] << " " << serial_commands_times[i] << "us" << std::endl;
 
-  if (max_speedup <= 1.50)
+  const double max_speedup = (1. * serial_total_time) / *std::max_element(serial_commands_times.begin(), serial_commands_times.end());
+  std::cout << "Maximum Theoretical Speedup " << max_speedup << "x" << std::endl;
+
+  if (commands.size() >= 1 && max_speedup <= 1.50)
     std::cerr << "  WARNING: Large Unbalance Between Commands" << std::endl;
 
-  const auto& [concurent_total_time, _] = bench<float>(mode, commands, enable_profiling, n_queues, kernel_tripcount);
-  std::cout << "Total Time // (us) " << concurent_total_time << "us" << std::endl;
-  const double speedup =  (1. * serial_total_time) / concurent_total_time;
+  const auto & [ concurent_total_time, _ ] = bench<float>(mode, commands, commands_parameters, enable_profiling, n_queues);
+  std::cout << "Best Total Time // (us) " << concurent_total_time << "us" << std::endl;
+  const double speedup = (1. * serial_total_time) / concurent_total_time;
   std::cout << "Speedup Relative to Serial " << speedup << "x" << std::endl;
 
-
-  if (max_speedup >= 1.3*speedup) {
+  if (max_speedup >= 1.3 * speedup) {
     std::cout << "FAILURE: Far from Theoretical Speedup" << std::endl;
     return 1;
   }
-    
+
   std::cout << "SUCCESS: Close from Theoretical Speedup" << std::endl;
   return 0;
 }
