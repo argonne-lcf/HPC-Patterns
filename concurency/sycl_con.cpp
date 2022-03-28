@@ -53,7 +53,14 @@ std::pair<long, std::vector<long>> bench(std::string mode, std::vector<std::stri
     pl = sycl::property_list{sycl::property::queue::enable_profiling{}};
 
   // List of queues!
-  std::vector<sycl::queue> Qs(n_queues, sycl::queue(C, D, pl));
+  // In some compiler 'Qs(n_queues, sycl::queue(C, D, pl))' doesn't create new queus but take a ref.
+  // "Constructs a container with n elements. Each element is a copy of val." say the pec.
+  // Still unclear about this behavior
+  std::vector<sycl::queue> Qs;
+  for (size_t i=0; i < n_queues; i++) {
+    Qs.push_back(sycl::queue(C, D, pl));
+  }
+
   // Initialize buffers according to the commands
   std::vector<std::vector<T *>> buffers;
   for (auto &command : commands) {
@@ -134,18 +141,18 @@ void print_help_and_exit(std::string binname, std::string msg) {
                      "                COMMAND...\n"
                      "\n"
                      "Options:\n"
-                     "--C_tripcount            [default: -1]. Number of FMA per compute kernel\n"
-                     "                             '-1' will auto-tune this parameter\n"
-                     "--{C,MD,DM}_buffer       [default: -1]. Work-group size of the commands\n"
-                     "                             '-1' will auto-tune this parameter\n"
-                     "--n_queues=<nqueues>     [default: -1]. Number of queues used to run COMMANDS\n"
-                     "                            '-1' mean automatic selection:\n"
-                     "                              - if `in_order`, one queue per COMMAND\n"
-                     "                              - else one queue\n"
-                     "COMMAND                  [possible values: C,MD,DM]\n"
-                     "                            C:  Compute kernel\n"
-                     "                            MD: Malloc allocated memory to Device memory memcopy\n"
-                     "                            DM: Device Memory to Malloc allocated memory memcopy\n";
+                     "--C_tripcount         [default: -1]. Each kernel work-item will perform 64*C_tripcount FMA\n"
+                     "                        '-1' will auto-tune this parameter so each commands take similar time\n"
+                     "--{C,MD,DM}_buffer    [default: -1]. Work-group size of the commands\n"
+                     "                        '-1' will auto-tune this parameter so each commands take similar time\n"
+                     "--n_queues=<nqueues>  [default: -1]. Number of queues used to run COMMANDS\n"
+                     "                        '-1' mean automatic selection:\n"
+                     "                          - if `in_order`, one queue per COMMAND\n"
+                     "                          - else one queue\n"
+                     "COMMAND               [possible values: C,MD,DM]\n"
+                     "                        C:  Compute kernel\n"
+                     "                        MD: Malloc allocated memory to Device memory memcopy\n"
+                     "                        DM: Device Memory to Malloc allocated memory memcopy\n";
   std::cout << help << std::endl;
   std::exit(1);
 }
@@ -226,7 +233,7 @@ int main(int argc, char *argv[]) {
       (commands_parameters_cli["buffer_MD"] == -1 && std::count(commands.begin(), commands.end(), "MD"))) {
     std::vector<std::string> commands_{"DM", "MD"};
     const auto & [ _1, commands_times ] = bench<float>("serial", commands_, commands_parameters, enable_profiling, n_queues);
-    // Default is maximum, hence we will reduce the longest one
+    // The default size if the maximum possible, hence we will reduce the longest one
     if (commands_times[0] >= commands_times[1])
       commands_parameters["buffer_DM"] = (1. * commands_times[1] / commands_times[0]) * commands_parameters["buffer_DM"];
     else
