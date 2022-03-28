@@ -19,6 +19,7 @@
 #include <utility>
 #include <vector>
 #include <iomanip>
+#include <numeric>
 
 #include <sycl/sycl.hpp>
 #define NUM_REPETION 10
@@ -211,7 +212,12 @@ int main(int argc, char *argv[]) {
     // We want each command to take the same time. We have only one parameter (kernel_tripcount) 
     // In first approximation for the compute kernel T(kernel_time) -> elapsed_time is linear
     long kernel_tripcount0 = 20000;
-    const auto& [copy_time, _1] = bench<float>("serial", {"MD"}, enable_profiling, n_queues);
+    // Some strange HW don't have the same BW for MD and DM. 
+    // We will autotunne C so that it take the average time for data transfer.
+    std::vector<std::string> copy_commands;
+    std::copy_if(commands.begin(), commands.end(), std::back_inserter(copy_commands), [](auto s){return s != "C";} );
+    const auto& [_1, commands_times] = bench<float>("serial", copy_commands, enable_profiling, n_queues);
+    double copy_time = std::accumulate(commands_times.begin(), commands_times.end(),0) / (1.*commands_times.size());
     const auto& [compute_time0, _2] = bench<float>("serial", {"C"}, enable_profiling, n_queues, kernel_tripcount0);
     kernel_tripcount = (1.*kernel_tripcount0/compute_time0)*copy_time;
     std::cout << "Autotuned Kernel Tripcount " << kernel_tripcount << std::endl;
@@ -229,7 +235,7 @@ int main(int argc, char *argv[]) {
  const double max_speedup = (1.* serial_total_time) / *std::max_element(serial_commands_times.begin(), serial_commands_times.end());
  std::cout << "Maximum Theoretical Speedup " << max_speedup << "x" << std::endl;
 
-  if (max_speedup <= 1.80)
+  if (max_speedup <= 1.50)
     std::cerr << "  WARNING: Large Unbalance Between Commands" << std::endl;
 
   const auto& [concurent_total_time, _] = bench<float>(mode, commands, enable_profiling, n_queues, kernel_tripcount);
