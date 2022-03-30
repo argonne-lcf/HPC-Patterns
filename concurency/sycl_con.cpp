@@ -92,7 +92,8 @@ std::pair<long, std::vector<long>> bench(std::string mode, std::vector<std::stri
       if (commands[i] == "C") {
         T *ptr = buffers[i][0];
         const auto kernel_tripcount = commands_parameters["tripcount_C"];
-        Q.parallel_for(N, [ptr, kernel_tripcount](sycl::item<1> j) { ptr[j] = busy_wait(kernel_tripcount, (T)j); });
+        std::size_t kernel_range = static_cast<std::size_t>(N);
+        Q.parallel_for(sycl::range{kernel_range}, [ptr, kernel_tripcount](sycl::id<1> j) { ptr[j] = busy_wait(kernel_tripcount, (T)j); });
       } else {
         //Copy is src -> dest
         Q.copy(buffers[i][0], buffers[i][1], N);
