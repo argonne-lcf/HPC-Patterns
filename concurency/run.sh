@@ -2,7 +2,7 @@ set -o xtrace
 dpcpp sycl_con.cpp
 
 (
-for commands in "C C" "C MD" "C DM" "MD DM"
+for commands in "C C" "C M2D" "C D2M" "M2D D2M"
 do
   for mode in "out_of_order" "in_order"
   do
