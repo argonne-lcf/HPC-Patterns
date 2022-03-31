@@ -53,7 +53,7 @@ std::pair<long, std::vector<long>> bench(std::string mode, std::vector<std::stri
 
   // List of queues!
   // One shoud not use 'Qs(n_queues, sycl::queue(C, D, pl))'!
-  // This copy queue and hence sharing the native objects. 
+  // This copy queue and hence sharing the native objects.
   std::vector<sycl::queue> Qs;
   for (size_t i=0; i < n_queues; i++)
     Qs.push_back(sycl::queue(C, D, pl));
@@ -229,14 +229,18 @@ int main(int argc, char *argv[]) {
   if (commands.empty())
     print_help_and_exit(argv[0], "Need to specify COMMANDS (C,M2D,D2M)");
 
+  std::unordered_map<std::string,size_t> commands_parameters;
+  for (const auto &s: commands_parameters_cli)
+    commands_parameters[s.first] = s.second == -1 ? commands_parameters_default[s.first] : commands_parameters_cli[s.first];
   //                                     __
   //    /\     _|_  _ _|_     ._   _    (_   _  ._ o  _. |
   //   /--\ |_| |_ (_) |_ |_| | | (/_   __) (/_ |  | (_| |
   //
-  std::unordered_map<std::string,size_t> commands_parameters;
-  for (const auto &s: commands_parameters_cli)
-    commands_parameters[s.first] = s.second == -1 ? commands_parameters_default[s.first] : commands_parameters_cli[s.first];
 
+  // We want each command to take the same time. We have only one parameter (kernel_tripcount)
+  // In first approximation all our commands are linear in time
+
+  // First we auto-tunne the memory so that D2M And M2D take the same time
   if ((commands_parameters_cli["globalsize_D2M"] == -1 && std::count(commands.begin(), commands.end(), "D2M")) &&
       (commands_parameters_cli["globalsize_M2D"] == -1 && std::count(commands.begin(), commands.end(), "M2D"))) {
     std::vector<std::string> commands_{"D2M", "M2D"};
@@ -250,14 +254,13 @@ int main(int argc, char *argv[]) {
     for (auto &command : commands_)
       std::cout << "  Autotuned globalsize_" << command << " " << commands_parameters["globalsize_" + command] << std::endl;
   }
-
+  // Then we aute-tunne the compute kernel that it take the same amount of the data-transfer
   if (commands_parameters_cli["tripcount_C"] == -1 && std::count(commands.begin(), commands.end(), "C") &&
       (std::count(commands.begin(), commands.end(), "D2M") || std::count(commands.begin(), commands.end(), "M2D"))) {
-    // We want each command to take the same time. We have only one parameter (kernel_tripcount)
-    // In first approximation for the compute kernel T(kernel_time) -> elapsed_time is linear
     std::vector<std::string> copy_commands;
     std::copy_if(commands.begin(), commands.end(), std::back_inserter(copy_commands), [](auto s) { return s != "C"; });
     const auto & [ _1, commands_times ] = bench<float>("serial", copy_commands, commands_parameters, enable_profiling, n_queues,n_repetitions);
+    // Take the average, in case we have D2M, M2D, C where D2M and M2D didn't have been auto-tunned
     const double copy_time = std::accumulate(commands_times.begin(), commands_times.end(), 0) / (1. * commands_times.size());
     const auto & [ compute_time0, _2 ] = bench<float>("serial", {"C"}, commands_parameters, enable_profiling, n_queues,n_repetitions);
     commands_parameters["tripcount_C"] = (1. * commands_parameters["tripcount_C"] / compute_time0) * copy_time;
@@ -274,7 +277,7 @@ int main(int argc, char *argv[]) {
     std::cout << "  Best " << std::setw(3) << commands[i] << " " << serial_commands_times[i] << "us" << std::endl;
 
   const double max_speedup = (1. * serial_total_time) / *std::max_element(serial_commands_times.begin(), serial_commands_times.end());
-  std::cout << "Maximum Theoretical Speedup " << max_speedup << "x" << std::endl;
+  std::cout << "Maximum Theoretical Speedup: " << max_speedup << "x" << std::endl;
 
   if (commands.size() >= 1 && max_speedup <= 1.50)
     std::cerr << "  WARNING: Large Unbalance Between Commands" << std::endl;
