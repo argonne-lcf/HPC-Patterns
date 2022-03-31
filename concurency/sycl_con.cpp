@@ -21,6 +21,7 @@
 #include <unordered_map>
 #include <utility>
 #include <vector>
+#include <set>
 
 #include <sycl/sycl.hpp>
 template <class T> T busy_wait(size_t N, T i) {
@@ -33,7 +34,7 @@ template <class T> T busy_wait(size_t N, T i) {
 }
 
 template <class T>
-std::pair<long, std::vector<long>> bench(std::string mode, std::vector<std::string> commands, std::unordered_map<std::string, size_t> commands_parameters,
+std::pair<long, std::vector<long>> bench(std::string mode, std::vector<std::string>& commands, std::unordered_map<std::string, size_t>& commands_parameters,
           bool enable_profiling, int n_queues, int n_repetitions) {
 
   //   ___
@@ -62,12 +63,23 @@ std::pair<long, std::vector<long>> bench(std::string mode, std::vector<std::stri
   std::vector<std::vector<T *>> buffers;
   for (auto &command : commands) {
     const auto N = commands_parameters["globalsize_" + command];
-    if (command == "C")
-      buffers.push_back({sycl::malloc_device<T>(N, D, C)});
-    else if (command == "D2M")
-      buffers.push_back({sycl::malloc_device<T>(N, D, C), static_cast<T *>(calloc(N, sizeof(T)))});
-    else if (command == "M2D")
-      buffers.push_back({static_cast<T *>(calloc(N, sizeof(T))), sycl::malloc_device<T>(N, D, C)});
+    std::vector<T *> buffer;
+    std::string command_sanitized(command);
+    command_sanitized.erase(std::remove(command_sanitized.begin(), command_sanitized.end(), '2'), command_sanitized.end()); 
+    for (auto c: command_sanitized) {
+        if (c == 'C')
+            buffer.push_back(sycl::malloc_device<T>(N, D, C));
+        else if (c == 'M')
+            buffer.push_back(static_cast<T *>(calloc(N, sizeof(T))));
+        else if (c == 'D')
+            buffer.push_back(sycl::malloc_device<T>(N, D, C)); 
+        else if (c == 'H')
+            buffer.push_back(sycl::malloc_host<T>(N, C));
+        else if (c == 'S')
+            buffer.push_back(sycl::malloc_shared<T>(N, D, C));
+
+    }
+    buffers.push_back(buffer);
   }
 
   long total_time = std::numeric_limits<long>::max();
@@ -225,47 +237,64 @@ int main(int argc, char *argv[]) {
   //
   const sycl::device D{sycl::gpu_selector()};
   const auto max_mem_alloc_command = std::min(D.get_info<sycl::info::device::global_mem_size>() / commands.size(), D.get_info<sycl::info::device::max_mem_alloc_size>());
-  std::unordered_map<std::string, long> commands_parameters_default = {{"globalsize_M2D", max_mem_alloc_command / sizeof(float)},
+  std::unordered_map<std::string, size_t> commands_parameters_default = {
+                                                                       {"globalsize_M2D", max_mem_alloc_command / sizeof(float)},
                                                                        {"globalsize_D2M", max_mem_alloc_command / sizeof(float)},
                                                                        {"globalsize_C", D.get_info<sycl::info::device::sub_group_sizes>()[0]},
                                                                        {"tripcount_C", 40000}};
 
   std::unordered_map<std::string,size_t> commands_parameters;
-  for (const auto &s: commands_parameters_cli)
-    commands_parameters[s.first] = s.second == -1 ? commands_parameters_default[s.first] : commands_parameters_cli[s.first];
+  for (const auto &[k,v]: commands_parameters_cli)
+    commands_parameters[k] = (v == -1) ? commands_parameters_default[k] : v;
+
+  std::set<std::string> commands_uniq(commands.begin(), commands.end());
   //                                     __
   //    /\     _|_  _ _|_     ._   _    (_   _  ._ o  _. |
   //   /--\ |_| |_ (_) |_ |_| | | (/_   __) (/_ |  | (_| |
   //
 
+   std::unordered_map<std::string,std::string> commands_parameters_tunned{ { "C", "tripcount_C"},
+                                                                           { "M2D", "globalsize_M2D"},
+                                                                           { "D2M", "globalsize_D2M"}  };
+
+
   // We want each command to take the same time. We have only one parameter (kernel_tripcount)
   // In first approximation all our commands are linear in time
-
-  // First we auto-tunne the memory so that D2M And M2D take the same time
-  if ((commands_parameters_cli["globalsize_D2M"] == -1 && std::count(commands.begin(), commands.end(), "D2M")) &&
-      (commands_parameters_cli["globalsize_M2D"] == -1 && std::count(commands.begin(), commands.end(), "M2D"))) {
-    std::vector<std::string> commands_{"D2M", "M2D"};
-    const auto & [ _1, commands_times ] = bench<float>("serial", commands_, commands_parameters, enable_profiling, n_queues,n_repetitions);
-    // The default size if the maximum possible, hence we will reduce the longest one
-    if (commands_times[0] >= commands_times[1])
-      commands_parameters["globalsize_D2M"] = (1. * commands_times[1] / commands_times[0]) * commands_parameters["globalsize_D2M"];
-    else
-      commands_parameters["globalsize_M2D"] = (1. * commands_times[0] / commands_times[1]) * commands_parameters["globalsize_M2D"];
-
-    for (auto &command : commands_)
-      std::cout << "  Autotuned globalsize_" << command << " " << commands_parameters["globalsize_" + command] << std::endl;
+  bool need_auto_tunne = false;
+  for (const auto k: commands_uniq) {
+    const auto name_parameter = commands_parameters_tunned[k];
+    need_auto_tunne |= (commands_parameters_cli[name_parameter] == -1);
   }
-  // Then we aute-tunne the compute kernel that it take the same amount of the data-transfer
-  if (commands_parameters_cli["tripcount_C"] == -1 && std::count(commands.begin(), commands.end(), "C") &&
-      (std::count(commands.begin(), commands.end(), "D2M") || std::count(commands.begin(), commands.end(), "M2D"))) {
-    std::vector<std::string> copy_commands;
-    std::copy_if(commands.begin(), commands.end(), std::back_inserter(copy_commands), [](auto s) { return s != "C"; });
-    const auto & [ _1, commands_times ] = bench<float>("serial", copy_commands, commands_parameters, enable_profiling, n_queues,n_repetitions);
-    // Take the average, in case we have D2M, M2D, C where D2M and M2D didn't have been auto-tunned
-    const double copy_time = std::accumulate(commands_times.begin(), commands_times.end(), 0) / (1. * commands_times.size());
-    const auto & [ compute_time0, _2 ] = bench<float>("serial", {"C"}, commands_parameters, enable_profiling, n_queues,n_repetitions);
-    commands_parameters["tripcount_C"] = (1. * commands_parameters["tripcount_C"] / compute_time0) * copy_time;
-    std::cout << "  Autotuned Compute Kernel Tripcount: " << commands_parameters["tripcount_C"] << std::endl;
+
+  if (need_auto_tunne && (commands_uniq.size() != 1)) {
+    std::cout << "Performing Autotuning" << std::endl;
+    // Get the baseline. We assume everything is linear, run the max value
+    std::vector<std::string> commands_uniq_vec(commands_uniq.begin(), commands_uniq.end());
+    auto [_, serial_commands_times ] = bench<float>("serial", commands_uniq_vec, commands_parameters, enable_profiling, n_queues, n_repetitions);
+    // Take the mintime of the max value 
+    long min_time =  std::numeric_limits<long>::max();
+    for (int i=0; i < commands_uniq_vec.size(); i++ ) {
+      if (commands_uniq_vec[i] == "C")
+        continue;
+      min_time = std::min(serial_commands_times[i], min_time);
+    }
+
+    // Just need to apply the regression now 
+    for (int i=0 ; i <= commands_uniq_vec.size() ; i++) {
+        const auto name_command = commands_uniq_vec[i];
+        const auto name_parameter = commands_parameters_tunned[name_command];
+        if (commands_parameters_cli[name_parameter] == -1) { 
+            // Todo check if new_parameter >= max possible values
+            long new_parameter = (1. * min_time) / serial_commands_times[i] * commands_parameters[name_parameter];
+            commands_parameters[name_parameter] = new_parameter;
+        }
+    }
+  }
+
+  std::cout <<"Parameters used:" << std::endl;
+  for (const auto k: commands_uniq) {
+    const auto name_parameter = commands_parameters_tunned[k];
+    std::cout << "  "<< name_parameter << ": " << commands_parameters[name_parameter] << std::endl;
   }
 
   //    _                             __                   _       _
@@ -275,7 +304,7 @@ int main(int argc, char *argv[]) {
   const auto & [ serial_total_time, serial_commands_times ] = bench<float>("serial", commands, commands_parameters, enable_profiling, n_queues,n_repetitions);
   std::cout << "Best Total Time Serial: " << serial_total_time << "us" << std::endl;
   for (size_t i = 0; i < commands.size(); i++)
-    std::cout << "  Best " << std::setw(3) << commands[i] << " " << serial_commands_times[i] << "us" << std::endl;
+    std::cout << "  Best Time Command " << i << " (" << std::setw(3) << commands[i] << "): " << serial_commands_times[i] << "us" << std::endl;
 
   const double max_speedup = (1. * serial_total_time) / *std::max_element(serial_commands_times.begin(), serial_commands_times.end());
   std::cout << "Maximum Theoretical Speedup: " << max_speedup << "x" << std::endl;
@@ -289,10 +318,10 @@ int main(int argc, char *argv[]) {
   std::cout << "Speedup Relative to Serial: " << speedup << "x" << std::endl;
 
   if (max_speedup >= 1.3 * speedup) {
-    std::cout << "FAILURE. Far from Theoretical Speedup" << std::endl;
+    std::cout << "FAILURE: Far from Theoretical Speedup" << std::endl;
     return 1;
   }
 
-  std::cout << "SUCCESS. Close from Theoretical Speedup" << std::endl;
+  std::cout << "SUCCESS: Close from Theoretical Speedup" << std::endl;
   return 0;
 }
