@@ -159,16 +159,6 @@ void print_help_and_exit(std::string binname, std::string msg) {
 }
 
 int main(int argc, char *argv[]) {
-  //    _       _                 _
-  //   | \  _ _|_ _.     | _|_   |_) _. ._ _. ._ _   _ _|_  _  ._   \  / _. |      _   _
-  //   |_/ (/_ | (_| |_| |  |_   |  (_| | (_| | | | (/_ |_ (/_ |     \/ (_| | |_| (/_ _>
-  //
-  const sycl::device D{sycl::gpu_selector()};
-  std::unordered_map<std::string, long> commands_parameters_default = {{"globalsize_M2D", D.get_info<sycl::info::device::max_mem_alloc_size>() / sizeof(float)},
-                                                                       {"globalsize_D2M", D.get_info<sycl::info::device::max_mem_alloc_size>() / sizeof(float)},
-                                                                       {"globalsize_C", D.get_info<sycl::info::device::sub_group_sizes>()[0]},
-                                                                       {"tripcount_C", 40000}};
-
   //    _                       _
   //   |_) _. ._ _ o ._   _    /  |     /\  ._ _      ._ _   _  ._ _|_  _
   //   |  (_| | _> | | | (_|   \_ |_   /--\ | (_| |_| | | | (/_ | | |_ _>
@@ -228,6 +218,17 @@ int main(int argc, char *argv[]) {
 
   if (commands.empty())
     print_help_and_exit(argv[0], "Need to specify COMMANDS (C,M2D,D2M)");
+
+  //    _       _                 _
+  //   | \  _ _|_ _.     | _|_   |_) _. ._ _. ._ _   _ _|_  _  ._   \  / _. |      _   _
+  //   |_/ (/_ | (_| |_| |  |_   |  (_| | (_| | | | (/_ |_ (/_ |     \/ (_| | |_| (/_ _>
+  //
+  const sycl::device D{sycl::gpu_selector()};
+  const auto max_mem_alloc_command = std::min(D.get_info<sycl::info::device::global_mem_size>() / commands.size(), D.get_info<sycl::info::device::max_mem_alloc_size>());
+  std::unordered_map<std::string, long> commands_parameters_default = {{"globalsize_M2D", max_mem_alloc_command / sizeof(float)},
+                                                                       {"globalsize_D2M", max_mem_alloc_command / sizeof(float)},
+                                                                       {"globalsize_C", D.get_info<sycl::info::device::sub_group_sizes>()[0]},
+                                                                       {"tripcount_C", 40000}};
 
   std::unordered_map<std::string,size_t> commands_parameters;
   for (const auto &s: commands_parameters_cli)
