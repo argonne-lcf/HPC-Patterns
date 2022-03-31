@@ -166,8 +166,13 @@ int main(int argc, char *argv[]) {
   //   |_/ (/_ | (_| |_| |  |_   |  (_| | (_| | | | (/_ |_ (/_ |     \/ (_| | |_| (/_ _>
   //
   const sycl::device D{sycl::gpu_selector()};
-  std::unordered_map<std::string, long> commands_parameters_default = {{"globalsize_M2D", D.get_info<sycl::info::device::max_mem_alloc_size>() / sizeof(float)},
-                                                                       {"globalsize_D2M", D.get_info<sycl::info::device::max_mem_alloc_size>() / sizeof(float)},
+#ifdef DEFAULT_SIZE
+  const std::size_t default_size = DEFAULT_SIZE;
+#else
+  const std::size_t default_size = D.get_info<sycl::info::device::max_mem_alloc_size>();
+#endif
+  std::unordered_map<std::string, long> commands_parameters_default = {{"globalsize_M2D", default_size / sizeof(float)},
+                                                                       {"globalsize_D2M", default_size / sizeof(float)},
                                                                        {"globalsize_C", D.get_info<sycl::info::device::sub_group_sizes>()[0]},
                                                                        {"tripcount_C", 40000}};
 
