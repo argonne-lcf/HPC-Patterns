@@ -23,17 +23,17 @@
 #include <vector>
 
 #include <sycl/sycl.hpp>
-template <class T> T busy_wait(long N, T i) {
+template <class T> T busy_wait(size_t N, T i) {
   T x = 1.3f;
-  T y = (T)i;
-  for (long j = 0; j < N; j++) {
+  T y = i;
+  for (size_t j = 0; j < N; j++) {
     MAD_64(x, y);
   }
   return y;
 }
 
 template <class T>
-std::pair<long, std::vector<long>> bench(std::string mode, std::vector<std::string> commands, std::unordered_map<std::string, long> commands_parameters, 
+std::pair<long, std::vector<long>> bench(std::string mode, std::vector<std::string> commands, std::unordered_map<std::string, size_t> commands_parameters,
           bool enable_profiling, int n_queues, int n_repetitions) {
 
   //   ___
@@ -92,8 +92,7 @@ std::pair<long, std::vector<long>> bench(std::string mode, std::vector<std::stri
       if (commands[i] == "C") {
         T *ptr = buffers[i][0];
         const auto kernel_tripcount = commands_parameters["tripcount_C"];
-        std::size_t kernel_range = static_cast<std::size_t>(N);
-        Q.parallel_for(sycl::range{kernel_range}, [ptr, kernel_tripcount](sycl::id<1> j) { ptr[j] = busy_wait(kernel_tripcount, (T)j); });
+        Q.parallel_for(sycl::range{N}, [ptr, kernel_tripcount](sycl::id<1> j) { ptr[j] = busy_wait(kernel_tripcount, (T)j); });
       } else {
         //Copy is src -> dest
         Q.copy(buffers[i][0], buffers[i][1], N);
@@ -236,10 +235,9 @@ int main(int argc, char *argv[]) {
   //    /\     _|_  _ _|_     ._   _    (_   _  ._ o  _. |
   //   /--\ |_| |_ (_) |_ |_| | | (/_   __) (/_ |  | (_| |
   //
-  auto commands_parameters(commands_parameters_cli);
+  std::unordered_map<std::string,size_t> commands_parameters;
   for (const auto &s: commands_parameters_cli)
-    if (s.second == -1)
-        commands_parameters[s.first] = commands_parameters_default[s.first];
+    commands_parameters[s.first] = s.second == -1 ? commands_parameters_default[s.first] : commands_parameters_cli[s.first];
 
   if ((commands_parameters_cli["globalsize_D2M"] == -1 && std::count(commands.begin(), commands.end(), "D2M")) &&
       (commands_parameters_cli["globalsize_M2D"] == -1 && std::count(commands.begin(), commands.end(), "M2D"))) {
