@@ -52,13 +52,11 @@ std::pair<long, std::vector<long>> bench(std::string mode, std::vector<std::stri
     pl = sycl::property_list{sycl::property::queue::enable_profiling{}};
 
   // List of queues!
-  // In some compiler 'Qs(n_queues, sycl::queue(C, D, pl))' doesn't create new queus but take a ref.
-  // "Constructs a container with n elements. Each element is a copy of val." say the pec.
-  // Still unclear about this behavior
+  // One shoud not use 'Qs(n_queues, sycl::queue(C, D, pl))'!
+  // This copy queue and hence sharing the native objects. 
   std::vector<sycl::queue> Qs;
-  for (size_t i=0; i < n_queues; i++) {
+  for (size_t i=0; i < n_queues; i++)
     Qs.push_back(sycl::queue(C, D, pl));
-  }
 
   // Initialize buffers according to the commands
   std::vector<std::vector<T *>> buffers;
