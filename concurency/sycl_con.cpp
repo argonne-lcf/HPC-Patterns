@@ -156,34 +156,38 @@ void print_help_and_exit(std::string binname, std::string msg) {
                      "                COMMAND...\n"
                      "\n"
                      "Options:\n"
-                     "--tripcount_C             [default: -1]. Each kernel work-item will perform 64*C_tripcount FMA\n"
-                     "                            '-1' will auto-tune this parameter so each commands take similar time\n"
-                     "--globalsize_{C,A2B}    [default: -1]. Work-group size of the commands\n"
-                     "                            '-1' will auto-tune this parameter so each commands take similar time\n"
-                     "--queues                  [default: -1]. Number of queues used to run COMMANDS\n"
-                     "                            '-1' mean automatic selection:\n"
-                     "                              - if `in_order`, one queue per COMMAND\n"
-                     "                              - else one queue\n"
-                     "--repetitions             [default: 10]. Number of repetions for each measuremnts\n"
-                     "COMMAND                   [possible values: C, A2B]\n"
-                     "                             C:  Compute kernel\n"
-                     "                             A2B: Memcopy from A to B\n"
-                     "                             Where A,B can be:\n"
-                     "                               M: Malloc allocated memory\n"
-                     "                               D: sycl::device allocated memory\n"
-                     "                               H: sycl::host allocated memory\n"
-                     "                               S: sycl::shared allocated memory\n";
+                     "--tripcount_C               [default: -1]. Each kernel work-item will perform 64*C_tripcount FMA\n"
+                     "                              '-1' will auto-tune this parameter so each commands take similar time\n"
+                     "--globalsize_{C,A2B}        [default: -1]. Work-group size of the commands\n"
+                     "                             '-1' will auto-tune this parameter so each commands take similar time\n"
+                     "--globalsize_default_memory [default: -1].  Size of the memory buffer before auto-tuning \n"
+                     "                             '-1' mean maximun possible size\n"
+                     "--queues                    [default: -1]. Number of queues used to run COMMANDS\n"
+                     "                              '-1' mean automatic selection:\n"
+                     "                                - if `in_order`, one queue per COMMAND\n"
+                     "                                - else one queue\n"
+                     "--repetitions               [default: 10]. Number of repetions for each measuremnts\n"
+                     "COMMAND                     [possible values: C, A2B]\n"
+                     "                              C:  Compute kernel\n"
+                     "                              A2B: Memcopy from A to B\n"
+                     "                              Where A,B can be:\n"
+                     "                                M: Malloc allocated memory\n"
+                     "                                D: sycl::device allocated memory\n"
+                     "                                H: sycl::host allocated memory\n"
+                     "                                S: sycl::shared allocated memory\n";
   std::cout << help << std::endl;
   std::exit(1);
 }
 
-size_t get_default_command_parameter(std::string command, size_t num_command) {
+size_t get_default_command_parameter(std::string command, size_t num_command, std::unordered_map<std::string, long> &commands) {
   const sycl::device D{sycl::gpu_selector()};
   if (command.rfind("globalsize_C", 0) == 0)
     return D.get_info<sycl::info::device::sub_group_sizes>()[0];
   if (command.rfind("tripcount_C", 0) == 0)
     return 40000;
   if (command.rfind("globalsize_", 0) == 0) {
+    if (commands["globalsize_default_memory"] != -1)
+      return commands["globalsize_default_memory"];
     const auto max_mem_alloc_command = std::min(D.get_info<sycl::info::device::global_mem_size>() / num_command, D.get_info<sycl::info::device::max_mem_alloc_size>());
     return max_mem_alloc_command / sizeof(float);
   }
@@ -202,7 +206,7 @@ int main(int argc, char *argv[]) {
   //   |  (_| | _> | | | (_|   \_ |_   /--\ | (_| |_| | | | (/_ | | |_ _>
   //                      _|                   _|
   //
-  std::unordered_map<std::string, long> commands_parameters_cli = {{"globalsize_C", -1}, {"tripcount_C", -1}};
+  std::unordered_map<std::string, long> commands_parameters_cli = {{"globalsize_C", -1}, {"tripcount_C", -1}, {"globalsize_default_memory", -1}};
   bool enable_profiling = false;
   int n_queues = -1;
   int n_repetitions = 10;
@@ -266,10 +270,9 @@ int main(int argc, char *argv[]) {
   // Add missing global_size
   for (const auto &command : commands)
     commands_parameters_cli.try_emplace("globalsize_" + command, -1);
-
   std::unordered_map<std::string, size_t> commands_parameters;
   for (const auto & [ k, v ] : commands_parameters_cli)
-    commands_parameters[k] = (v == -1) ? get_default_command_parameter(k, commands.size()) : v;
+    commands_parameters[k] = (v == -1) ? get_default_command_parameter(k, commands.size(), commands_parameters_cli) : v;
 
   std::set<std::string> commands_uniq(commands.begin(), commands.end());
   //                                     __
