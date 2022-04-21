@@ -54,11 +54,9 @@ std::pair<long, std::vector<long>> bench(std::string mode, std::vector<std::stri
   std::vector<T *> buffers;
   for (auto &command : commands) {
     const auto N = commands_parameters["globalsize_" + command];
-    for (auto c : sanitize_command(command)) {
-        auto *ptr = static_cast<T *>(calloc(N, sizeof(T)));
-        #pragma omp target enter data map(alloc: ptr[:N])
-        buffers.push_back(ptr);
-    }
+    auto *ptr = static_cast<T *>(calloc(N, sizeof(T)));
+    #pragma omp target enter data map(alloc: ptr[:N])
+    buffers.push_back(ptr);
   }
 
   long total_time = std::numeric_limits<long>::max();
@@ -83,27 +81,23 @@ std::pair<long, std::vector<long>> bench(std::string mode, std::vector<std::stri
     for (int i = 0; i < commands.size(); i++) {
       const auto s = std::chrono::high_resolution_clock::now();
       const auto N = commands_parameters["globalsize_" + commands[i]];
-
+      T *ptr = buffers[i];
       if (commands[i] == "C") {
-        T *ptr = buffers[i];
         const auto kernel_tripcount = commands_parameters["tripcount_C"];
 #ifdef NOWAIT
     #pragma omp target teams distribute parallel for nowait
 #else
     #pragma omp target teams distribute parallel for
 #endif
-        for (int j=0; j < N; j++) {
-            ptr[j] =  busy_wait(kernel_tripcount, (T)j);
-        }
+        for (int j=0; j < N; j++)
+            ptr[j] = busy_wait(kernel_tripcount, (T)j);
       } else if (commands[i] == "D2M") {
-        T *ptr=buffers[i];
 #ifdef NOWAIT
     #pragma omp target update from(ptr[:N]) nowait
 #else
     #pragma omp target update from(ptr[:N])
 #endif
       } else if (commands[i] == "M2D") {
-         T *ptr=buffers[i];
 #ifdef NOWAIT
     #pragma omp target update to(ptr[:N]) nowait
 #else
@@ -137,7 +131,7 @@ std::pair<long, std::vector<long>> bench(std::string mode, std::vector<std::stri
   //   /  |  _   _. ._      ._
   //   \_ | (/_ (_| | | |_| |_)
   //                        |
-  for (const auto &ptr : buffers) {
+  for (auto &ptr : buffers) {
     #pragma omp target exit data map(delete: ptr)
     free(ptr);
   }
@@ -182,7 +176,7 @@ void print_help_and_exit(std::string binname, std::string msg) {
 
 size_t get_default_command_parameter(std::string command, size_t num_command, std::unordered_map<std::string, long> &commands) {
   if (command.rfind("globalsize_C", 0) == 0)
-    return 8;
+    return 1;
   if (command.rfind("tripcount_C", 0) == 0)
     return 40000;
   if (command.rfind("globalsize_", 0) == 0) {
@@ -295,7 +289,6 @@ int main(int argc, char *argv[]) {
     // Take the mintime of the max value
     long min_time = std::numeric_limits<long>::max();
     for (int i = 0; i < commands_uniq_vec.size(); i++) {
-      std::cout << "serial_commands_times " << commands_uniq_vec[i] << " " << serial_commands_times[i] << std::endl;
       if (commands_uniq_vec[i] == "C")
         continue;
       min_time = std::min(serial_commands_times[i], min_time);
