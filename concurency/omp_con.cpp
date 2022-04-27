@@ -23,6 +23,7 @@
 #include <utility>
 #include <vector>
 #include <algorithm>
+#include <cassert>
 
 #include <omp.h>
 template <class T> T busy_wait(size_t N, T i) {
@@ -54,7 +55,13 @@ std::pair<long, std::vector<long>> bench(std::string mode, std::vector<std::stri
   std::vector<T *> buffers;
   for (auto &command : commands) {
     const auto N = commands_parameters["globalsize_" + command];
-    auto *ptr = static_cast<T *>(calloc(N, sizeof(T)));
+    T* ptr;
+    if (command.find("H") != std::string::npos) {
+        ptr = static_cast<T *>(omp_target_alloc_host(N*sizeof(T), omp_get_default_device() ));
+    } else {
+        ptr = static_cast<T *>(calloc(N, sizeof(T)));
+    }
+    assert(ptr && "Wrong Allocation");
     #pragma omp target enter data map(alloc: ptr[:N])
     buffers.push_back(ptr);
   }
@@ -74,7 +81,6 @@ std::pair<long, std::vector<long>> bench(std::string mode, std::vector<std::stri
   //
   for (int r = 0; r < n_repetitions; r++) {
     auto s0 = std::chrono::high_resolution_clock::now();
-    // Run all commands
 #ifdef HOST_THREADS
     #pragma omp parallel for
 #endif
@@ -91,13 +97,13 @@ std::pair<long, std::vector<long>> bench(std::string mode, std::vector<std::stri
 #endif
         for (int j=0; j < N; j++)
             ptr[j] = busy_wait(kernel_tripcount, (T)j);
-      } else if (commands[i] == "D2M") {
+      } else if (commands[i] == "D2M" or commands[i] == "D2H") {
 #ifdef NOWAIT
     #pragma omp target update from(ptr[:N]) nowait
 #else
     #pragma omp target update from(ptr[:N])
 #endif
-      } else if (commands[i] == "M2D") {
+      } else if (commands[i] == "M2D" or commands[i] == "H2D") {
 #ifdef NOWAIT
     #pragma omp target update to(ptr[:N]) nowait
 #else
@@ -122,18 +128,24 @@ std::pair<long, std::vector<long>> bench(std::string mode, std::vector<std::stri
     const auto curent_total_time = std::chrono::duration_cast<std::chrono::microseconds>(e0 - s0).count();
     total_time = std::min(total_time, curent_total_time);
   }
-
   // Assume the "best theoritical" serial
   if (mode == "serial")
     total_time = std::min(total_time, std::accumulate(commands_times.begin(), commands_times.end(), 0L));
+
 
   //    _
   //   /  |  _   _. ._      ._
   //   \_ | (/_ (_| | | |_| |_)
   //                        |
-  for (auto &ptr : buffers) {
-    #pragma omp target exit data map(delete: ptr)
-    free(ptr);
+  //for (auto &ptr : buffers) {
+  for (int i=0; i < buffers.size(); i++) {
+    const auto N = commands_parameters["globalsize_" + commands[i]];
+    auto* ptr = buffers[i];
+    #pragma omp target exit data map(delete: ptr[:N])
+    if (commands[i].find("H") != std::string::npos)
+        omp_target_free(ptr, omp_get_default_device());
+    else
+        free(ptr);
   }
   return std::make_pair(total_time, commands_times);
 }
@@ -243,7 +255,7 @@ int main(int argc, char *argv[]) {
     } else if (s.rfind("-", 0) == 0) {
       print_help_and_exit(argv[0], "Unsupported option: '" + s + "'");
     } else {
-      static std::vector<std::string> command_supported = {"C", "M", "D"};
+      static std::vector<std::string> command_supported = {"C", "M", "D","H"};
       for (auto c : sanitize_command(s)) {
         if (std::find(command_supported.begin(), command_supported.end(), std::string{c}) == command_supported.end())
           print_help_and_exit(argv[0], "Unsupported value for COMMAND");
@@ -255,7 +267,7 @@ int main(int argc, char *argv[]) {
     n_queues = (mode == "host_threads") ? commands.size() : 1;
 
   if (commands.empty())
-    print_help_and_exit(argv[0], "Need to specify COMMANDS (C,M2D,D2M)");
+    print_help_and_exit(argv[0], "Need to specify COMMANDS (C,M2D,D2M,H2D,D2H)");
 
   //    _       _                 _
   //   | \  _ _|_ _.     | _|_   |_) _. ._ _. ._ _   _ _|_  _  ._   \  / _. |      _   _
