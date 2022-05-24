@@ -355,6 +355,6 @@ int main(int argc, char *argv[]) {
     return 1;
   }
 
-  std::cout << "SUCCESS: Close from Theoretical Speedup" << std::endl;
+  std::cout << "SUCCESS: Close to Theoretical Speedup" << std::endl;
   return 0;
 }
