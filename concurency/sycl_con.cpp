@@ -124,6 +124,10 @@ std::pair<long, std::vector<long>> bench(std::string mode, std::vector<std::stri
     // Save time
     const auto e0 = std::chrono::high_resolution_clock::now();
     const auto curent_total_time = std::chrono::duration_cast<std::chrono::microseconds>(e0 - s0).count();
+#ifdef LOG_VERBOSE
+    if (mode != "serial")
+        std::cout << "#repetition "  << r << ": " << curent_total_time << " us" << std::endl; 
+#endif
     total_time = std::min(total_time, curent_total_time);
   }
 
@@ -314,6 +318,8 @@ int main(int argc, char *argv[]) {
   for (const auto k : commands_uniq) {
     const auto name_parameter = commands_to_parameters_tunned(k);
     std::cout << "  " << name_parameter << ": " << commands_parameters[name_parameter] << std::endl;
+    if (k == "C")
+        std::cout << "  " << "globalsize_C"<< ": " << commands_parameters["globalsize_C"] << std::endl;
   }
 
   //    _                             __                   _       _
