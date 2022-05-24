@@ -15,10 +15,10 @@ with open(path_file) as f:
 d_result = defaultdict(lambda: defaultdict(dict))
 env = None
 for line in lines:
-    if line.startswith("+ export"):
+    if line.startswith("++ export"):
         env = line.split('export')[1].strip()
 
-    elif line.startswith("+ ./"):
+    elif line.startswith("++ ./"):
         type_of_concurency, *argv = line.strip().split()[2:]
 
         profiling = False
@@ -27,7 +27,6 @@ for line in lines:
             argv.pop()
     else:
         result = line.split(':')[0]
-
         if profiling and result == "FAILURE":
             result = "SUCCESS*"
 
