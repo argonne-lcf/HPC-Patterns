@@ -7,7 +7,7 @@ export ZE_AFFINITY_MASK=0.0
 export PrintDebugSettings=1
 export EnableFlushTaskSubmission=1
 
-for env in "ZE_AFFINITY_MASK=0.0" "ZE_AFFINITY_MASK=1.0" "SYCL_PI_LEVEL_ZERO_BATCH_SIZE=40"
+for env in "ZE_AFFINITY_MASK=0.0" "ZE_AFFINITY_MASK=1.0" "SYCL_PI_LEVEL_ZERO_BATCH_SIZE=40 CFESingleSliceDispatchCCSMode=1"
 do
     (
     export $env
@@ -25,5 +25,5 @@ do
 done
 
 echo "#SUMMARY"
-grep  -E 'export|./sycl.out|SUCCESS|FAILURE' sycl.log |& sycl_summary.log
+grep  -E 'export|./a.out|SUCCESS|FAILURE' sycl.log |& tee sycl_summary.log
 ./parse.py sycl_summary.log
