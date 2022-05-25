@@ -9,8 +9,7 @@ for envs in "ZE_AFFINITY_MASK=0.0" \
             "ZE_AFFINITY_MASK=1.0" \
             "ZE_AFFINITY_MASK=0.0 SYCL_PI_LEVEL_ZERO_BATCH_SIZE=40" \
             "ZE_AFFINITY_MASK=0.0 CFESingleSliceDispatchCCSMode=1" \
-            "ZE_AFFINITY_MASK=1.0 SYCL_PI_LEVEL_ZERO_BATCH_SIZE=40" \
-            "ZE_AFFINITY_MASK=1.0 CFESingleSliceDispatchCCSMode=1"
+            "ZE_AFFINITY_MASK=0.0 SYCL_PI_LEVEL_ZERO_USE_IMMEDIATE_COMMANDLISTS=1 EnableFlushTaskSubmission=1"
 do
     (
     export $envs
