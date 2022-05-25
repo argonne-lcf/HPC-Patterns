@@ -15,21 +15,18 @@ with open(path_file) as f:
 d_result = defaultdict(lambda: defaultdict(dict))
 env = None
 for line in lines:
-    if line.startswith("++ export"):
+    if "export" in line:
         env = line.split('export')[1].strip()
-
-    elif line.startswith("++ ./"):
+    elif "./" in line:
         type_of_concurency, *argv = line.strip().split()[2:]
-
         profiling = False
         if argv[-1] == '--enable_profiling':
             profiling = True
             argv.pop()
-    else:
+    elif any(t in line for t in ["FAILURE","SUCCESS"]):
         result = line.split(':')[0]
         if profiling and result == "FAILURE":
             result = "SUCCESS*"
-
         d_result[env][" ".join(argv)][type_of_concurency] = result
 
 for name, table_data in d_result.items():

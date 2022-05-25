@@ -159,7 +159,6 @@ void print_help_and_exit(std::string binname, std::string msg) {
     std::cout << "ERROR: " << msg << std::endl;
   std::string help = "Usage: " + binname +
                      " (host_threads | nowait | serial)\n"
-                     "                [--enable_profiling]\n"
                      "                [--tripcount_C <tripcount>]\n"
                      "                [--globalsize_{C,A2B} <global_size>]\n"
                      "                [--queues <n_queues>]\n"
@@ -233,9 +232,7 @@ int main(int argc, char *argv[]) {
   // I'm just an old C programmer trying to do some C++
   for (int i = 1; i < argl.size(); i++) {
     std::string s{argl[i]};
-    if (s == "--enable_profiling") {
-      enable_profiling = true;
-    } else if (s == "--queues") {
+    if (s == "--queues") {
       i++;
       if (i < argl.size()) {
         n_queues = std::stoi(argl[i]);
