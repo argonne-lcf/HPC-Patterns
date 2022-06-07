@@ -186,7 +186,7 @@ void print_help_and_exit(std::string binname, std::string msg) {
 size_t get_default_command_parameter(std::string command, size_t num_command, std::unordered_map<std::string, long> &commands) {
   const sycl::device D{sycl::gpu_selector()};
   if (command.rfind("globalsize_C", 0) == 0)
-    return D.get_info<sycl::info::device::sub_group_sizes>()[0];
+    return 1; //D.get_info<sycl::info::device::sub_group_sizes>()[0];
   if (command.rfind("tripcount_C", 0) == 0)
     return 40000;
   if (command.rfind("globalsize_", 0) == 0) {

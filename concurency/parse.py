@@ -19,10 +19,12 @@ for line in lines:
         env = line.split('export')[1].strip()
     elif "./" in line:
         type_of_concurency, *argv = line.strip().split()[2:]
-        profiling = False
-        if argv[-1] == '--enable_profiling':
+        try:
+            argv.remove('--enable_profiling')
+        except ValueError:
+            profiling = False
+        else:
             profiling = True
-            argv.pop()
     elif any(t in line for t in ["FAILURE","SUCCESS"]):
         result = line.split(':')[0]
         if profiling and result == "FAILURE":
