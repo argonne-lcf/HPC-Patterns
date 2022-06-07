@@ -7,9 +7,8 @@ rm -f omp.log
 
 export PrintDebugSettings=1
 for envs in "ZE_AFFINITY_MASK=0.0" \
-            "ZE_AFFINITY_MASK=1.0" \
+            "ZE_AFFINITY_MASK=0" \
             "ZE_AFFINITY_MASK=0.0 LIBOMPTARGET_LEVEL_ZERO_USE_IMMEDIATE_COMMAND_LIST=1 EnableFlushTaskSubmission=1" \
-            "ZE_AFFINITY_MASK=1.0 LIBOMPTARGET_LEVEL_ZERO_USE_IMMEDIATE_COMMAND_LIST=1 EnableFlushTaskSubmission=1"
             "ZE_AFFINITY_MASK=0.0 LIBOMPTARGET_LEVEL_ZERO_USE_IMMEDIATE_COMMAND_LIST=1 EnableFlushTaskSubmission=1 LIBOMPTARGET_LEVEL0_USE_COPY_ENGINE=all"
 do
     (
