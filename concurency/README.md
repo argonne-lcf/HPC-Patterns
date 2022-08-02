@@ -1,7 +1,52 @@
 # Experiment Concurrency
 
 
-Tests if runnings independent COMMANDS in a mode that allows concurrency/overlaps is faster than running them serially. 
+Tests if runnings independent COMMANDS in a mode that allows concurrency/overlaps is faster than running them serially.
+We have tests for OpenMP and SYCL. 
+
+# Install and Usage
+
+## Requirement
+- A OpenMP compiler
+- A Sycl Compiler
+- python with the `tabulate` package installed
+
+## To run
+
+On Intel hardware just use the `run_*.sh`. For other hardware, please edit the compilaiton file
+
+## Usage
+```
+Usage: ./omp_nowait (nowait | host_threads | serial)
+                [--enable_profiling]
+                [--tripcount_C <tripcount>]
+                [--globalsize_{C,A2B} <global_size>]
+                [--queues <n_queues>]
+                [--repetitions <n_repetions>]
+                COMMAND...
+
+Options:
+--tripcount_C               [default: -1]. Each kernel work-item will perform 64*C_tripcount FMA
+                              '-1' will auto-tune this parameter so each commands take similar time
+--globalsize_{C,A2B}        [default: -1]. Work-group size of the commands
+                             '-1' will auto-tune this parameter so each commands take similar time
+--globalsize_default_memory [default: -1].  Size of the memory buffer before auto-tuning
+                             '-1' mean maximun possible size
+--queues                    [default: -1]. Number of queues used to run COMMANDS
+                              '-1' mean automatic selection:
+                                - if `host_threads`, one queue per COMMAND
+                                - else one queue
+--repetitions               [default: 10]. Number of repetions for each measuremnts
+COMMAND                     [possible values: C, A2B]
+                              C:  Compute kernel
+                              A2B: Memcopy from A to B
+                              Where A,B can be:
+                                M: Malloc allocated memory
+                                D: sycl::device allocated memory
+                                H: sycl::host allocated memory
+                                S: sycl::shared allocated memory
+
+```
 
 ## OMP
 
@@ -24,22 +69,6 @@ for () {
     #pragma omp target nowait
     foo()
 }
-```
-
-### Code
-
-```
-Usage: ./omp_con (nowait | host_threads | serial)
-                 [--kernel_tripcount=<tripcount>]
-                 COMMAND...
-
-Options:
---kernel_tripcount       [default: 10000]
-when out_of_order, one per COMMANDS when in order
-COMMAND                  [possible values: C,MD,DM]
-                            C:  Compute kernel
-                            MD: Malloc allocated memory to Device memory memcopy
-                            DM: Device Memory to Malloc allocated memory memcopy
 ```
 
 ## SYCL
@@ -71,23 +100,4 @@ for (auto Q: Qs) {
 for (auto Q: Qs) {
     Q.wait();
 }
-```
-
-### Code
-
-```
-Usage: ./sycl_con (in_order | out_of_order)
-                  [--enable_profiling]
-                  [--n_queues=<queues>]
-                  [--kernel_tripcount=<tripcount>]
-                  COMMAND...
-
-Options:
---kernel_tripcount       [default: 10000]
---n_queues=<nqueues>     [default: -1]. Number of queues used to run COMMANDS.
-                                        If -1: one queue when out_of_order, one per COMMANDS when in order
-COMMAND                  [possible values: C,MD,DM]
-                            C:  Compute kernel
-                            MD: Malloc allocated memory to Device memory memcopy
-                            DM: Device Memory to Malloc allocated memory memcopy
 ```
