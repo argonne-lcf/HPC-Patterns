@@ -118,7 +118,6 @@ bench(std::string mode, std::vector<std::string> &commands,
   //   /  |  _   _. ._      ._
   //   \_ | (/_ (_| | | |_| |_)
   //                        |
-  // for (auto &ptr : buffers) {
   for (int i = 0; i < buffers.size(); i++) {
     const auto N = commands_parameters["globalsize_" + commands[i]];
     auto *ptr = buffers[i];
