@@ -50,11 +50,11 @@ COMMAND                     [possible values: C, A2B]
 
 ## OMP
 
-With OpenMP one can hope to achieve concurrency using two main strategies (please feel free to make a PR that use task):
+With OpenMP one can hope to achieve concurrency using two main strategies 
 
 ### `host_threads`
 
-```
+```c++
 #pragma omp parralel for
 for () {
     #pragma omp target
@@ -64,7 +64,7 @@ for () {
 
 ### `nowait`
 
-```
+```c++
 for () {
     #pragma omp target nowait
     foo()
@@ -77,7 +77,7 @@ On SYCL  one can hope to achieve concurrency in two main fashions:
 
 ### `our of order queue`
 
-```
+```c++
 sycl::queue Q;
 #pragma omp parralel for
 for () {
@@ -88,7 +88,7 @@ Q.wait()
 
 ### Multiple `in order` queue
 
-```
+```c++
 std::vector<sycl::queue> Qs
 for ()
     Qs.push_back(sycl::queue(in_order))
