@@ -1,10 +1,11 @@
 #!/bin/bash
-
 set -o xtrace
-dpcpp sycl_con.cpp -o sycl
-rm -f sycl.log
 
+icpx -fsycl -std=c++17 bench_sycl.cpp main.cpp -o sycl
+
+rm -f sycl.log
 export PrintDebugSettings=1
+
 for envs in "ZE_AFFINITY_MASK=0.0" \
             "ZE_AFFINITY_MASK=1" \
             "ZE_AFFINITY_MASK=0.0 SYCL_PI_LEVEL_ZERO_BATCH_SIZE=40" \
