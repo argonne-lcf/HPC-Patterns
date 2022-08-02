@@ -58,7 +58,7 @@ With OpenMP one can hope to achieve concurrency using two main strategies
 #pragma omp parralel for
 for () {
     #pragma omp target
-    foo() 
+    foo();
 }
 ```
 
@@ -67,7 +67,7 @@ for () {
 ```c++
 for () {
     #pragma omp target nowait
-    foo()
+    foo();
 }
 ```
 
@@ -80,10 +80,10 @@ On SYCL  one can hope to achieve concurrency in two main fashions:
 ```c++
 sycl::queue Q;
 #pragma omp parralel for
-for () {
-    Q.submit(foo)
-}
-Q.wait()
+for ()
+    Q.submit(kernel);
+
+Q.wait();
 ```
 
 ### Multiple `in order` queue
@@ -91,13 +91,11 @@ Q.wait()
 ```c++
 std::vector<sycl::queue> Qs
 for ()
-    Qs.push_back(sycl::queue(in_order))
+    Qs.push_back(sycl::queue(in_order));
 
-for (auto Q: Qs) {
+for (auto Q: Qs)
     Q.submit();
-}
 
-for (auto Q: Qs) {
+for (auto Q: Qs)
     Q.wait();
-}
 ```
