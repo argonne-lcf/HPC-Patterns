@@ -29,6 +29,12 @@ bench(std::string mode, std::vector<std::string> &commands,
   //   _|_ | | |  |_
   //
   // Initialize buffers according to the commands
+  if (n_queues == -1)
+    n_queues = (mode == "host_threads") ? commands.size() : 1;
+
+  if (verbose)
+    std::cout << "#n_host_threads used: " << n_queues << std::endl;
+
   std::vector<T *> buffers;
   for (auto &command : commands) {
     const auto N = commands_parameters["globalsize_" + command];
