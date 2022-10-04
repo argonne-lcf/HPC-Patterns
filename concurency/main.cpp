@@ -59,7 +59,7 @@ void print_help_and_exit(std::string binname, std::string msg) {
       "                             '-1' mean maximun possible size\n"
       "--queues                    [default: -1]. Number of queues used to run COMMANDS\n"
       "                              '-1' mean automatic selection:\n"
-      "                                - if `host_threads`, one queue per COMMAND\n"
+      "                                - if `host_threads | in_order`, one threads/queues per COMMAND\n"
       "                                - else one queue\n"
       "--repetitions               [default: 10]. Number of repetions for each measuremnts\n"
       "COMMAND                     [possible values: C, A2B]\n"
@@ -158,9 +158,7 @@ int main(int argc, char *argv[]) {
       commands.push_back(sc);
     }
   }
-  if (n_queues == -1)
-    n_queues = (mode == "host_threads") ? commands.size() : 1;
-
+ 
   if (commands.empty())
     print_help_and_exit(argv[0], "Need to specify COMMANDS (C,M2D,D2M,H2D,D2H)");
 
