@@ -26,6 +26,12 @@ bench(std::string mode, std::vector<std::string> &commands,
   //    |  ._  o _|_
   //   _|_ | | |  |_
   //
+  if (n_queues == -1)
+    n_queues = (mode == "in_order") ? commands.size() : 1;
+
+  if (verbose)
+    std::cout << "#n_queues used: " << n_queues << std::endl;
+
   const sycl::device D{sycl::gpu_selector()};
   const sycl::context C(D);
   // By default SYCL queue are out-of-order
