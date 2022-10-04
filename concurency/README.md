@@ -1,4 +1,4 @@
-# Experiment Concurrency
+# Experimental Concurrency
 
 Tests if runnings independent COMMANDS in a mode that allows concurrency/overlaps is faster than running them serially.
 We have tests for OpenMP and SYCL. 
