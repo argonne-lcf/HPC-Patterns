@@ -75,7 +75,7 @@ for () {
 
 On SYCL  one can hope to achieve concurrency in two main fashions:
 
-### `out of order queue`
+### One `out of order` queue
 
 ```c++
 sycl::queue Q;
