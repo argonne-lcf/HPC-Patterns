@@ -17,19 +17,13 @@ env = None
 for line in lines:
     if "export" in line:
         env = line.split("export")[1].strip()
-    elif "./" in line:
-        type_of_concurency, *argv = line.strip().split()[2:]
-        try:
-            argv.remove("--enable_profiling")
-        except ValueError:
-            profiling = False
-        else:
-            profiling = True
     elif any(t in line for t in ["FAILURE", "SUCCESS"]):
-        result = line.split(":")[0]
-        if profiling and result == "FAILURE":
-            result = "SUCCESS*"
-        d_result[env][" ".join(argv)][type_of_concurency] = result
+        if "FAILURE" in line:
+            result = "FAILURE"
+        elif "SUCCESS" in line:
+            result = "SUCCESS"
+        type_of_concurency, argv, *_ = line[2:].split('|') # Remove ## prefix
+        d_result[env][" ".join(argv.split())][type_of_concurency.strip()] = result
 
 for name, table_data in d_result.items():
     l_of_dict = [{"commands": name, **type_} for name, type_ in table_data.items()]

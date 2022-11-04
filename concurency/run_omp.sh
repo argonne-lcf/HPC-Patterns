@@ -4,6 +4,8 @@ set -o xtrace
 icpx -fiopenmp -fopenmp-targets=spir64 -std=c++17 bench_omp.cpp main.cpp -DHOST_THREADS -o omp_host_threads
 icpx -fiopenmp -fopenmp-targets=spir64 -std=c++17 bench_omp.cpp main.cpp -DNOWAIT -o omp_nowait
 
+LCOMMANDS=("C C" "C M2D" "C D2M" "M2D D2M" "H2D D2H")
+
 rm -f omp.log
 export PrintDebugSettings=1
 
@@ -14,12 +16,9 @@ for envs in "ZE_AFFINITY_MASK=0.0" \
 do
     (
     export $envs
-    for commands in "C C" "C M2D" "C D2M" "M2D D2M" "H2D D2H"
+    for mode in "host_threads" "nowait"
     do
-        for mode in "host_threads" "nowait"
-        do
-            ./omp_$mode "$mode" $commands
-        done
+    	./omp_$mode "$mode" ${LCOMMANDS[@]/#/--commands }
     done
    ) |& tee -a omp.log
 done
