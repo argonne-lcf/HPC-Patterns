@@ -25,4 +25,4 @@ do
    ) |& tee -a omp.log
 done
 
-./../parse.py omp.log
+../parse.py omp.log

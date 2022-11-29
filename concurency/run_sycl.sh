@@ -26,4 +26,4 @@ do
     ) |& tee -a sycl.log
 done
 
-./parse.py sycl.log
+../parse.py sycl.log
