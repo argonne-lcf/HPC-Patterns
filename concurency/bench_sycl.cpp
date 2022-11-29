@@ -32,7 +32,7 @@ bench(std::string mode, std::vector<std::string> &commands,
   if (verbose)
     std::cout << "#n_queues used: " << n_queues << std::endl;
 
-  const sycl::device D{sycl::gpu_selector()};
+  const sycl::device D{sycl::gpu_selector_v};
   const sycl::context C(D);
   // By default SYCL queue are out-of-order
   sycl::property_list pl;

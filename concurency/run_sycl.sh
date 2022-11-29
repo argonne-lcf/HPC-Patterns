@@ -1,7 +1,9 @@
 #!/bin/bash
 set -o xtrace
 
-icpx -fsycl -std=c++17 bench_sycl.cpp main.cpp -o sycl
+cd $(mktemp -d tmp-sycl-XXXX)
+
+icpx -fsycl -std=c++17 ../bench_sycl.cpp ../main.cpp -o sycl
 
 rm -f sycl.log
 export PrintDebugSettings=1

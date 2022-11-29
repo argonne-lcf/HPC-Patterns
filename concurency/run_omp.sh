@@ -1,8 +1,10 @@
 #!/bin/bash
 set -o xtrace
 
-icpx -fiopenmp -fopenmp-targets=spir64 -std=c++17 bench_omp.cpp main.cpp -DHOST_THREADS -o omp_host_threads
-icpx -fiopenmp -fopenmp-targets=spir64 -std=c++17 bench_omp.cpp main.cpp -DNOWAIT -o omp_nowait
+cd $(mktemp -d tmp-omp-XXXX)
+
+icpx -fiopenmp -fopenmp-targets=spir64 -std=c++17 ../bench_omp.cpp ../main.cpp -DHOST_THREADS -o omp_host_threads
+icpx -fiopenmp -fopenmp-targets=spir64 -std=c++17 ../bench_omp.cpp ../main.cpp -DNOWAIT -o omp_nowait
 
 LCOMMANDS=("C C" "C M2D" "C D2M" "M2D D2M" "H2D D2H")
 
@@ -23,4 +25,4 @@ do
    ) |& tee -a omp.log
 done
 
-./parse.py omp.log
+./../parse.py omp.log
