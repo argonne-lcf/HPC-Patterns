@@ -47,7 +47,7 @@ void print_help_and_exit(std::string binname, std::string msg) {
       "                [--globalsize_{C,A2B} <global_size>]\n"
       "                [--queues <n_queues>]\n"
       "                [--repetitions <n_repetions>]\n"
-      "                COMMAND...\n"
+      "                [--commands COMMANDS..]\n"
       "\n"
       "Options:\n"
       "--tripcount_C               [default: -1]. Each kernel work-item will "
