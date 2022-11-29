@@ -51,25 +51,22 @@ void print_help_and_exit(std::string binname, std::string msg) {
       "\n"
       "Options:\n"
       "--tripcount_C               [default: -1]. Each kernel work-item will "
-      "perform "
-      "64*C_tripcount FMA\n"
+      "perform 64*C_tripcount FMA\n"
       "                              '-1' will auto-tune this parameter so "
-      "each commands take "
-      "similar time\n"
+      "each commands take similar time\n"
       "--globalsize_{C,A2B}        [default: -1]. Work-group size of the "
       "commands\n"
       "                             '-1' will auto-tune this parameter so each "
-      "commands take "
-      "similar time\n"
+      "commands take similar time\n"
       "--globalsize_default_memory [default: -1].  Size of the memory buffer "
       "before auto-tuning \n"
       "                             '-1' mean maximun possible size\n"
       "--queues                    [default: -1]. Number of queues used to run "
       "COMMANDS\n"
       "                              '-1' mean automatic selection:\n"
-      "                                - if `host_threads | in_order`, one "
+      "                              - if `host_threads | in_order`, one "
       "threads/queues per COMMAND\n"
-      "                                - else one queue\n"
+      "                              - else one queue\n"
       "--repetitions               [default: 10]. Number of repetions for each "
       "measuremnts\n"
       "COMMAND                     [possible values: C, A2B]\n"
@@ -190,9 +187,7 @@ int main(int argc, char *argv[]) {
   commands = l_commands[0];
   //    _       _                 _
   //   | \  _ _|_ _.     | _|_   |_) _. ._ _. ._ _   _ _|_  _  ._   \  / _. |
-  //   _   _
   //   |_/ (/_ | (_| |_| |  |_   |  (_| | (_| | | | (/_ |_ (/_ |     \/ (_| |
-  //   |_| (/_ _>
   //
   // Add missing global_size
   for (const auto &commands : l_commands)
