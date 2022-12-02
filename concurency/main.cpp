@@ -7,6 +7,7 @@
 #include <string>
 #include <unordered_map>
 #include <vector>
+#include <limits>
 
 #define TOL_SPEEDUP 0.3
 
