@@ -259,6 +259,7 @@ int main(int argc, char *argv[]) {
                 << ": " << commands_parameters["globalsize_C"] << std::endl;
   }
 
+  int exit_code = 0;
   for (auto &commands : l_commands) {
 
     std::stringstream command_str;
@@ -307,8 +308,10 @@ int main(int argc, char *argv[]) {
     std::cout << "## " << command_str.str();
     if (max_speedup >= ((1. + TOL_SPEEDUP) * speedup)) {
       std::cout << "| FAILURE: Far from Theoretical Speedup" << std::endl;
+      exit_code = 1;
     } else {
       std::cout << "| SUCCESS: Close from Theoretical Speedup" << std::endl;
     }
   }
+  exit(exit_code);
 }
