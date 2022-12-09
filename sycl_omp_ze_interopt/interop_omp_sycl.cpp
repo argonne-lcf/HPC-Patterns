@@ -17,9 +17,6 @@ std::vector<struct syclDeviceInfo> xomp_get_infos_devices() {
 
     // This datascructure is a vector used to map a OpenMP device ID to a sycl context and device
    ompDeviceId2Context.resize(omp_get_num_devices());
-    //   Map each level zero (pcontext) to a vector a sycl::device.
-    //   This is requied to create SYCL::context spaming multiple devices.
-   std::map<ze_context_handle_t, std::vector<sycl::device>> hContext2device;
    for (int D=0; D< omp_get_num_devices(); D++) {
         omp_interop_t o = 0;
         #pragma omp interop init(prefer_type("sycl"), targetsync: o) device(D)
