@@ -174,8 +174,9 @@ int main(int argc, char *argv[]) {
       const auto sc = sanitize_command(s);
       for (auto c : sc) {
         if (std::find(command_supported.begin(), command_supported.end(),
-                      std::string{c}) == command_supported.end())
-          print_help_and_exit(argv[0], "Unsupported value for COMMAND");
+                      std::string{c}) == command_supported.end() ||
+	    sc == "HM" || sc == "MH")
+          print_help_and_exit(argv[0], "Unsupported value for COMMAND: "+ s);
       }
       commands.push_back(sc);
     }
@@ -233,7 +234,9 @@ int main(int argc, char *argv[]) {
     for (int i = 0; i < commands_uniq_vec.size(); i++) {
       if (commands_uniq_vec[i] == "C")
         continue;
+      std::cout << commands_uniq_vec[i] << " " << serial_commands_times[i] << std::endl;
       min_time = std::min(serial_commands_times[i], min_time);
+
     }
     // Just need to apply the regression now
     for (int i = 0; i < commands_uniq_vec.size(); i++) {
