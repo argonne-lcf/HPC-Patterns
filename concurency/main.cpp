@@ -23,7 +23,7 @@ template <class T>
 std::string
 time_info(std::vector<std::string> commands, long time,
           std::unordered_map<std::string, size_t> &commands_parameters, 
-	  float min_bandwidth = -1, int *pci_status = NULL) {
+	  float min_bandwidth = -1, int *pci_erno = NULL) {
 
   unsigned bytes = 0;
   for (const auto &command : commands)
@@ -35,8 +35,10 @@ time_info(std::vector<std::string> commands, long time,
   if (bytes) {
     float bw =  (1E-3) * bytes / time;
     sout << " (" << bw << " GBytes/s)";
-    if (min_bandwidth >= 0) {
-	*pci_status = (min_bandwidth > bw) ? 0 : 1;
+    if ( min_bandwidth >= 0 && bw < min_bandwidth ) {
+	*pci_erno = -1;
+    } else { 
+    	*pci_erno=0;
     }
   }    
   return sout.str();
@@ -316,16 +318,16 @@ int main(int argc, char *argv[]) {
                      n_queues, n_repetitions, verbose);
 
     // Analysis
-    int error_pci = 0;
+    int pci_erno = 0;
     std::cout << "Minimum Measured Total Time //: "
               << time_info<float>(commands, concurent_total_time,
                                   commands_parameters, 
-				  min_bandwidth, &error_pci)
+				  min_bandwidth, &pci_erno)
               << std::endl;
     const double speedup = (1. * serial_total_time) / concurent_total_time;
     std::cout << "Speedup Relative to Serial: " << speedup << "x" << std::endl;
     std::cout << "## " << command_str.str();
-    if (error_pci == 1) {
+    if (pci_erno != 0) {
       std::cout << "| FAILURE: Minimun Bandwish not reached" << std::endl;
       exit_code = 1;
     } else if (max_speedup >= ((1. + TOL_SPEEDUP) * speedup)) {
