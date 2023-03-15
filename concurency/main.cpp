@@ -22,7 +22,8 @@ std::string sanitize_command(std::string command) {
 template <class T>
 std::string
 time_info(std::vector<std::string> commands, long time,
-          std::unordered_map<std::string, size_t> &commands_parameters) {
+          std::unordered_map<std::string, size_t> &commands_parameters, 
+	  float min_bandwidth = -1, int *pci_status = NULL) {
 
   unsigned bytes = 0;
   for (const auto &command : commands)
@@ -31,9 +32,13 @@ time_info(std::vector<std::string> commands, long time,
 
   std::stringstream sout;
   sout << time << "us";
-  if (bytes)
-    sout << " (" << (1E-3) * bytes / time << " GBytes/s)";
-
+  if (bytes) {
+    float bw =  (1E-3) * bytes / time;
+    sout << " (" << bw << " GBytes/s)";
+    if (min_bandwidth >= 0) {
+	*pci_status = (min_bandwidth > bw) ? 0 : 1;
+    }
+  }    
   return sout.str();
 }
 
@@ -48,6 +53,7 @@ void print_help_and_exit(std::string binname, std::string msg) {
       "                [--globalsize_{C,A2B} <global_size>]\n"
       "                [--queues <n_queues>]\n"
       "                [--repetitions <n_repetions>]\n"
+      "		       [--min_bandwidth <min_bandwidth>\n"
       "                [--commands COMMANDS..]\n"
       "\n"
       "Options:\n"
@@ -70,6 +76,8 @@ void print_help_and_exit(std::string binname, std::string msg) {
       "                              - else one queue\n"
       "--repetitions               [default: 10]. Number of repetions for each "
       "measuremnts\n"
+      "---min_bandwidth            [default: 40]. Minimun bandwidith require for the test to pass\n"
+      "				     '-1' mean no minimun\n"
       "COMMAND                     [possible values: C, A2B]\n"
       "                              C:  Compute kernel\n"
       "                              A2B: Memcopy from A to B\n"
@@ -119,6 +127,7 @@ int main(int argc, char *argv[]) {
 
   int n_queues = -1;
   int n_repetitions = 10;
+  float min_bandwidth = 40;
 
   std::vector<std::string> argl(argv + 1, argv + argc);
   if (argl.empty())
@@ -152,6 +161,13 @@ int main(int argc, char *argv[]) {
         n_repetitions = std::stoi(argl[i]);
       } else {
         print_help_and_exit(argv[0], "Need to specify an value for '--queues'");
+      }
+    } else if (s == "--min_bandwidth") {
+      i++;
+      if (i < argl.size()) {
+        min_bandwidth = std::stof(argl[i]);
+      } else {
+        print_help_and_exit(argv[0], "Need to specify an value for '--min_bandwidth'");
       }
     } else if ((s.rfind("--tripcount_") == 0) ||
                (s.rfind("--globalsize_", 0) == 0)) {
@@ -234,7 +250,6 @@ int main(int argc, char *argv[]) {
     for (int i = 0; i < commands_uniq_vec.size(); i++) {
       if (commands_uniq_vec[i] == "C")
         continue;
-      std::cout << commands_uniq_vec[i] << " " << serial_commands_times[i] << std::endl;
       min_time = std::min(serial_commands_times[i], min_time);
 
     }
@@ -286,7 +301,6 @@ int main(int argc, char *argv[]) {
                                     commands_parameters)
                 << std::endl;
     }
-
     const double max_speedup = (1. * serial_total_time) /
                                *std::max_element(serial_commands_times.begin(),
                                                  serial_commands_times.end());
@@ -302,14 +316,19 @@ int main(int argc, char *argv[]) {
                      n_queues, n_repetitions, verbose);
 
     // Analysis
+    int error_pci = 0;
     std::cout << "Minimum Measured Total Time //: "
               << time_info<float>(commands, concurent_total_time,
-                                  commands_parameters)
+                                  commands_parameters, 
+				  min_bandwidth, &error_pci)
               << std::endl;
     const double speedup = (1. * serial_total_time) / concurent_total_time;
     std::cout << "Speedup Relative to Serial: " << speedup << "x" << std::endl;
     std::cout << "## " << command_str.str();
-    if (max_speedup >= ((1. + TOL_SPEEDUP) * speedup)) {
+    if (error_pci == 1) {
+      std::cout << "| FAILURE: Minimun Bandwish not reached" << std::endl;
+      exit_code = 1;
+    } else if (max_speedup >= ((1. + TOL_SPEEDUP) * speedup)) {
       std::cout << "| FAILURE: Far from Theoretical Speedup" << std::endl;
       exit_code = 1;
     } else {
