@@ -33,10 +33,10 @@ std::string time_info(std::vector<std::string> commands, long time,
   if (bytes) {
     float bw = (1E-3) * bytes / time;
     sout << " (" << bw << " GBytes/s)";
-    if ( min_bandwidth >= 0 && bw < min_bandwidth ) {
-	*pci_erno = -1;
+    if (pci_erno && min_bandwidth >= 0 && bw < min_bandwidth ) {
+        *pci_erno = -1;
     } else { 
-    	*pci_erno=0;
+        *pci_erno=0;
     }
   }
   return sout.str();
