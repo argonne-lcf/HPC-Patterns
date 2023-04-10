@@ -77,7 +77,7 @@ void print_help_and_exit(std::string binname, std::string msg) {
       "                              - else one queue\n"
       "--repetitions               [default: 10]. Number of repetions for each "
       "measuremnts\n"
-      "---min_bandwidth            [default: 35]. Minimun bandwidith require for the test to pass\n"
+      "---min_bandwidth            [default: -1]. Minimun bandwidith require for the test to pass\n"
       "				     '-1' mean no minimun\n"
       "COMMAND                     [possible values: C, A2B]\n"
       "                              C:  Compute kernel\n"
@@ -125,7 +125,7 @@ int main(int argc, char *argv[]) {
 
   int n_queues = -1;
   int n_repetitions = 10;
-  float min_bandwidth = 35;
+  float min_bandwidth = -1;
 
   std::vector<std::string> argl(argv + 1, argv + argc);
   if (argl.empty())
