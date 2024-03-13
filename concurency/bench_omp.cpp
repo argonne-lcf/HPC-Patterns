@@ -18,9 +18,9 @@ void validate_mode(std::string binname, std::string &mode) {
 
 // No metadirective in most of the compiler so...
 //  UGLY PRAGMA to the rescue!
-template <class T>
+template <class T, bool isHostThreads>
 std::pair<long, std::vector<long>>
-bench(std::string mode, std::vector<std::string> &commands,
+bench2(std::string mode, std::vector<std::string> &commands,
       std::unordered_map<std::string, size_t> &commands_parameters, bool enable_profiling,
       int n_queues, int n_repetitions, bool verbose) {
 
@@ -64,9 +64,9 @@ bench(std::string mode, std::vector<std::string> &commands,
   //
   for (int r = 0; r < n_repetitions; r++) {
     auto s0 = std::chrono::high_resolution_clock::now();
-#ifdef HOST_THREADS
-#pragma omp parallel for
-#endif
+#pragma omp metadirective \
+        when(user={condition(isHostThreads)}: \
+             parallel for )
     for (int i = 0; i < commands.size(); i++) {
       const auto s = std::chrono::high_resolution_clock::now();
       const auto N = commands_parameters["globalsize_" + commands[i]];
@@ -134,6 +134,19 @@ bench(std::string mode, std::vector<std::string> &commands,
       free(ptr);
   }
   return {total_time, commands_times};
+}
+
+template <class T>
+std::pair<long, std::vector<long>>
+bench(std::string mode, std::vector<std::string> &commands,
+      std::unordered_map<std::string, size_t> &commands_parameters, bool enable_profiling,
+      int n_queues, int n_repetitions, bool verbose) {
+
+   if (mode == "host_threads")
+        return bench2<T, true>(mode, commands, commands_parameters, enable_profiling, n_queues, n_repetitions, verbose);
+   else
+        return bench2<T, false>(mode, commands, commands_parameters, enable_profiling, n_queues, n_repetitions, verbose);
+
 }
 
 template std::pair<long, std::vector<long>>
