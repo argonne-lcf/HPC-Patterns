@@ -2,7 +2,6 @@
 #include <omp.h>
 #include <map>
 #include <iostream>
-namespace sycl = cl::sycl;
 
 struct syclDeviceInfo {
     sycl::context sycl_context;

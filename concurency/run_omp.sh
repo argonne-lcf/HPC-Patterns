@@ -3,8 +3,7 @@ set -o xtrace
 
 cd $(mktemp -d tmp-omp-XXXX)
 
-icpx -fiopenmp -fopenmp-targets=spir64 -std=c++17 ../bench_omp.cpp ../main.cpp -DHOST_THREADS -o omp_host_threads
-icpx -fiopenmp -fopenmp-targets=spir64 -std=c++17 ../bench_omp.cpp ../main.cpp -DNOWAIT -o omp_nowait
+icpx -fiopenmp -fopenmp-targets=spir64 -std=c++17 ../bench_omp.cpp ../main.cpp -o omp
 
 LCOMMANDS=("C C" "C M2D" "C D2M" "M2D D2M" "H2D D2H")
 
@@ -21,7 +20,7 @@ do
     export $envs
     for mode in "host_threads" "nowait"
     do
-    	./omp_$mode "$mode" ${LCOMMANDS[@]/#/--commands }
+	    ./omp "$mode" ${LCOMMANDS[@]/#/--commands }
     done
    ) |& tee -a omp.log
 done

@@ -21,8 +21,8 @@ void validate_mode(std::string binname, std::string &mode) {
 template <class T, bool isHostThreads>
 std::pair<long, std::vector<long>>
 bench2(std::string mode, std::vector<std::string> &commands,
-      std::unordered_map<std::string, size_t> &commands_parameters, bool enable_profiling,
-      int n_queues, int n_repetitions, bool verbose) {
+       std::unordered_map<std::string, size_t> &commands_parameters, bool enable_profiling,
+       int n_queues, int n_repetitions, bool verbose) {
 
   //   ___
   //    |  ._  o _|_
@@ -64,49 +64,35 @@ bench2(std::string mode, std::vector<std::string> &commands,
   //
   for (int r = 0; r < n_repetitions; r++) {
     auto s0 = std::chrono::high_resolution_clock::now();
-#pragma omp metadirective \
-        when(user={condition(isHostThreads)}: \
-             parallel for )
+#pragma omp metadirective when(user = {condition(isHostThreads)} : parallel for) otherwize()
     for (int i = 0; i < commands.size(); i++) {
       const auto s = std::chrono::high_resolution_clock::now();
       const auto N = commands_parameters["globalsize_" + commands[i]];
       T *ptr = buffers[i];
       if (commands[i] == "C") {
         const auto kernel_tripcount = commands_parameters["tripcount_C"];
-#ifdef NOWAIT
-#pragma omp target teams distribute parallel for nowait
-#else
-#pragma omp target teams distribute parallel for
-#endif
+#pragma omp metadirective when(                                                                    \
+        user = {condition(isHostThreads)} : target teams distribute parallel for)                  \
+        otherwize(target teams distribute parallel for nowait)
         for (int j = 0; j < N; j++)
           ptr[j] = busy_wait(kernel_tripcount, (T)j);
       } else if (commands[i] == "DM" or commands[i] == "DH") {
-#ifdef NOWAIT
-#pragma omp target update from(ptr[:N]) nowait
-#else
-#pragma omp target update from(ptr[:N])
-#endif
+#pragma omp metadirective when(user = {condition(isHostThreads)} : target update from(ptr[:N]))  \
+    otherwize(target update from(ptr[:N]) nowait)
       } else if (commands[i] == "MD" or commands[i] == "HD") {
-#ifdef NOWAIT
-#pragma omp target update to(ptr[:N]) nowait
-#else
-#pragma omp target update to(ptr[:N])
-#endif
+#pragma omp metadirective when(user = {condition(isHostThreads)} : target update to(ptr[:N]))    \
+    otherwize(target update to(ptr[:N]) nowait)
       }
 
       if (mode == "serial") {
-#ifdef NOWAIT
-#pragma omp taskwait
-#endif
+#pragma omp metadirective when(user = {condition(!isHostThreads)} : taskwait) otherwize()
         const auto e = std::chrono::high_resolution_clock::now();
         const auto curent_kernel_time =
             std::chrono::duration_cast<std::chrono::microseconds>(e - s).count();
         commands_times[i] = std::min(commands_times[i], curent_kernel_time);
       }
     }
-#ifdef NOWAIT
-#pragma omp taskwait
-#endif
+#pragma omp metadirective when(user = {condition(!isHostThreads)} : taskwait) otherwize()
     // Save time
     const auto e0 = std::chrono::high_resolution_clock::now();
     const auto curent_total_time =
@@ -142,11 +128,12 @@ bench(std::string mode, std::vector<std::string> &commands,
       std::unordered_map<std::string, size_t> &commands_parameters, bool enable_profiling,
       int n_queues, int n_repetitions, bool verbose) {
 
-   if (mode == "host_threads")
-        return bench2<T, true>(mode, commands, commands_parameters, enable_profiling, n_queues, n_repetitions, verbose);
-   else
-        return bench2<T, false>(mode, commands, commands_parameters, enable_profiling, n_queues, n_repetitions, verbose);
-
+  if (mode == "host_threads")
+    return bench2<T, true>(mode, commands, commands_parameters, enable_profiling, n_queues,
+                           n_repetitions, verbose);
+  else
+    return bench2<T, false>(mode, commands, commands_parameters, enable_profiling, n_queues,
+                            n_repetitions, verbose);
 }
 
 template std::pair<long, std::vector<long>>
