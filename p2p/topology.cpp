@@ -31,12 +31,12 @@ int main(int argc, char **argv) {
   // Get devices
   std::vector<zes_device_handle_t> hDevices;
   {
-    uint32_t driverCount;
+    uint32_t driverCount = 0;
     zeDriverGet(&driverCount, NULL);
     std::vector<zes_driver_handle_t> hDrivers(driverCount);
     zeDriverGet(&driverCount, hDrivers.data());
     for (auto hDriver : hDrivers) {
-      uint32_t deviceCount;
+      uint32_t deviceCount = 0;
       zeDeviceGet(hDriver, &deviceCount, NULL);
       int s = hDevices.size();
       hDevices.resize(s + deviceCount);
@@ -52,7 +52,7 @@ int main(int argc, char **argv) {
   {
     std::unordered_map<zes_fabric_port_id_t, connection_t> h;
     for (int i = 0; i < hDevices.size(); i++) {
-      uint32_t numPorts;
+      uint32_t numPorts = 0;
       zesDeviceEnumFabricPorts(hDevices[i], &numPorts, nullptr);
       std::vector<zes_fabric_port_handle_t> hFabricPorts(numPorts);
       zesDeviceEnumFabricPorts(hDevices[i], &numPorts, hFabricPorts.data());
