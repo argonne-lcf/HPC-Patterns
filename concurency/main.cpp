@@ -9,6 +9,11 @@
 #include <unordered_map>
 #include <vector>
 
+#ifdef USE_CCL
+#include <mpi.h>
+extern void ccl_teardown();
+#endif
+
 #define TOL_SPEEDUP 0.3
 
 std::string sanitize_command(std::string command) {
@@ -79,8 +84,9 @@ void print_help_and_exit(std::string binname, std::string msg) {
       "measuremnts\n"
       "---min_bandwidth            [default: -1]. Minimun bandwidith require for the test to pass\n"
       "				     '-1' mean no minimun\n"
-      "COMMAND                     [possible values: C, A2B]\n"
+      "COMMAND                     [possible values: C, A2B, P]\n"
       "                              C:  Compute kernel\n"
+      "                              P:  oneCCL point-to-point send/recv (needs 2 ranks)\n"
       "                              A2B: Memcopy from A to B\n"
       "                              Where A,B can be:\n"
       "                                M: Malloc allocated memory\n"
@@ -113,6 +119,15 @@ std::string commands_to_parameters_tunned(std::string command) {
 }
 
 int main(int argc, char *argv[]) {
+#ifdef USE_CCL
+  int provided;
+  MPI_Init_thread(&argc, &argv, MPI_THREAD_MULTIPLE, &provided);
+  int mpi_rank;
+  MPI_Comm_rank(MPI_COMM_WORLD, &mpi_rank);
+  // Only rank 0 talks
+  if (mpi_rank != 0)
+    std::cout.setstate(std::ios::failbit);
+#endif
   //    _                       _
   //   |_) _. ._ _ o ._   _    /  |     /\  ._ _      ._ _   _  ._ _|_  _
   //   |  (_| | _> | | | (_|   \_ |_   /--\ | (_| |_| | | | (/_ | | |_ _>
@@ -183,7 +198,7 @@ int main(int argc, char *argv[]) {
     } else if (s.rfind("-", 0) == 0) {
       print_help_and_exit(argv[0], "Unsupported option: '" + s + "'");
     } else {
-      static std::vector<std::string> command_supported = {"C", "M", "D", "H"};
+      static std::vector<std::string> command_supported = {"C", "M", "D", "H", "P"};
       const auto sc = sanitize_command(s);
       for (auto c : sc) {
         if (std::find(command_supported.begin(), command_supported.end(), std::string{c}) ==
@@ -318,5 +333,9 @@ int main(int argc, char *argv[]) {
       std::cout << "| SUCCESS: Close from Theoretical Speedup" << std::endl;
     }
   }
+#ifdef USE_CCL
+  ccl_teardown();
+  MPI_Finalize();
+#endif
   exit(exit_code);
 }
