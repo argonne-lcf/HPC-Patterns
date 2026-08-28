@@ -1,5 +1,6 @@
 #include "bench.hpp"
 #include <algorithm>
+#include <cstdlib>
 #include <iomanip>
 #include <iostream>
 #include <limits>
@@ -9,8 +10,11 @@
 #include <unordered_map>
 #include <vector>
 
-#ifdef USE_CCL
+#if defined(USE_CCL) || defined(USE_MPI)
 #include <mpi.h>
+#endif
+
+#ifdef USE_CCL
 extern void ccl_teardown();
 #endif
 
@@ -56,7 +60,11 @@ void print_help_and_exit(std::string binname, std::string msg) {
       "\n"
       "                [--enable_profiling]\n"
       "                [--tripcount_C <tripcount>]\n"
-      "                [--globalsize_{C,A2B} <global_size>]\n"
+      "                [--globalsize_{C,A2B"
+#if defined(USE_CCL) || defined(USE_MPI)
+      ",P"
+#endif
+      "} <global_size>]\n"
       "                [--queues <n_queues>]\n"
       "                [--repetitions <n_repetions>]\n"
       "		       [--min_bandwidth <min_bandwidth>\n"
@@ -67,8 +75,11 @@ void print_help_and_exit(std::string binname, std::string msg) {
       "perform 64*C_tripcount FMA\n"
       "                              '-1' will auto-tune this parameter so "
       "each commands take similar time\n"
-      "--globalsize_{C,A2B}        [default: -1]. Work-group size of the "
-      "commands\n"
+      "--globalsize_{C,A2B"
+#if defined(USE_CCL) || defined(USE_MPI)
+      ",P"
+#endif
+      "}        [default: -1]. Number of elements used by the commands\n"
       "                             '-1' will auto-tune this parameter so each "
       "commands take similar time\n"
       "--globalsize_default_memory [default: -1].  Size of the memory buffer "
@@ -84,9 +95,15 @@ void print_help_and_exit(std::string binname, std::string msg) {
       "measuremnts\n"
       "---min_bandwidth            [default: -1]. Minimun bandwidith require for the test to pass\n"
       "				     '-1' mean no minimun\n"
-      "COMMAND                     [possible values: C, A2B, P]\n"
+      "COMMAND                     [possible values: C, A2B"
+#if defined(USE_CCL) || defined(USE_MPI)
+      ", P"
+#endif
+      "]\n"
       "                              C:  Compute kernel\n"
-      "                              P:  oneCCL point-to-point send/recv (needs 2 ranks)\n"
+#if defined(USE_CCL) || defined(USE_MPI)
+      "                              P:  GPU-aware point-to-point send/recv (needs rank pairs)\n"
+#endif
       "                              A2B: Memcopy from A to B\n"
       "                              Where A,B can be:\n"
       "                                M: Malloc allocated memory\n"
@@ -94,6 +111,13 @@ void print_help_and_exit(std::string binname, std::string msg) {
       "                                H: sycl::host allocated memory\n"
       "                                S: sycl::shared allocated memory\n";
   std::cout << help << std::endl;
+#if defined(USE_CCL) || defined(USE_MPI)
+  int mpi_initialized, mpi_finalized;
+  MPI_Initialized(&mpi_initialized);
+  MPI_Finalized(&mpi_finalized);
+  if (mpi_initialized && !mpi_finalized)
+    MPI_Finalize();
+#endif
   std::exit(1);
 }
 
@@ -119,14 +143,26 @@ std::string commands_to_parameters_tunned(std::string command) {
 }
 
 int main(int argc, char *argv[]) {
+#if defined(USE_CCL) || defined(USE_MPI)
+  int required_thread_level = MPI_THREAD_FUNNELED;
 #ifdef USE_CCL
+  required_thread_level = MPI_THREAD_MULTIPLE;
+#endif
   int provided;
-  MPI_Init_thread(&argc, &argv, MPI_THREAD_MULTIPLE, &provided);
+  MPI_Init_thread(&argc, &argv, required_thread_level, &provided);
   int mpi_rank;
   MPI_Comm_rank(MPI_COMM_WORLD, &mpi_rank);
+  if (provided < required_thread_level) {
+    if (mpi_rank == 0)
+      std::cerr << "ERROR: MPI does not provide the required thread level" << std::endl;
+    MPI_Abort(MPI_COMM_WORLD, EXIT_FAILURE);
+    std::abort();
+  }
   // Only rank 0 talks
-  if (mpi_rank != 0)
+  if (mpi_rank != 0) {
     std::cout.setstate(std::ios::failbit);
+    std::cerr.setstate(std::ios::failbit);
+  }
 #endif
   //    _                       _
   //   |_) _. ._ _ o ._   _    /  |     /\  ._ _      ._ _   _  ._ _|_  _
@@ -165,6 +201,8 @@ int main(int argc, char *argv[]) {
       i++;
       if (i < argl.size()) {
         n_queues = std::stoi(argl[i]);
+        if (n_queues == 0 || n_queues < -1)
+          print_help_and_exit(argv[0], "--queues must be -1 or greater than zero");
       } else {
         print_help_and_exit(argv[0], "Need to specify an value for '--queues'");
       }
@@ -172,6 +210,8 @@ int main(int argc, char *argv[]) {
       i++;
       if (i < argl.size()) {
         n_repetitions = std::stoi(argl[i]);
+        if (n_repetitions <= 0)
+          print_help_and_exit(argv[0], "--repetitions must be greater than zero");
       } else {
         print_help_and_exit(argv[0], "Need to specify an value for '--queues'");
       }
@@ -198,7 +238,13 @@ int main(int argc, char *argv[]) {
     } else if (s.rfind("-", 0) == 0) {
       print_help_and_exit(argv[0], "Unsupported option: '" + s + "'");
     } else {
-      static std::vector<std::string> command_supported = {"C", "M", "D", "H", "P"};
+      static const std::vector<std::string> command_supported = {
+#if defined(USE_CCL) || defined(USE_MPI)
+          "C", "M", "D", "H", "P"
+#else
+          "C", "M", "D", "H"
+#endif
+      };
       const auto sc = sanitize_command(s);
       for (auto c : sc) {
         if (std::find(command_supported.begin(), command_supported.end(), std::string{c}) ==
@@ -335,6 +381,8 @@ int main(int argc, char *argv[]) {
   }
 #ifdef USE_CCL
   ccl_teardown();
+#endif
+#if defined(USE_CCL) || defined(USE_MPI)
   MPI_Finalize();
 #endif
   exit(exit_code);
